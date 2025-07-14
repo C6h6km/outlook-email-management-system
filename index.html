@@ -645,34 +645,35 @@
             </div>
             <div id="purchaseContent" class="section-content collapsed">
                 <div class="input-group">
-                    <label for="purchaseAppId">商户ID (app_id)</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+                        <label for="purchaseAppId">商户ID (app_id)</label>
+                        <button onclick="checkBalance()" class="small-btn">查询余额</button>
+                    </div>
                     <input type="text" id="purchaseAppId" placeholder="请输入商户ID" class="form-control">
+                    <div id="balanceDisplay" style="margin-top: 3px; font-size: 0.8rem; color: #27ae60; font-weight: bold;">
+                        点击"查询余额"获取账户信息
+                    </div>
                 </div>
                 <div class="input-group">
                     <label for="purchaseAppKey">商户密钥 (app_key)</label>
                     <input type="password" id="purchaseAppKey" placeholder="请输入商户密钥" class="form-control">
                 </div>
                 <div class="input-group">
-                    <label for="commodityId">邮箱类型</label>
-                    <select id="commodityId" class="form-control">
-                        <option value="1">短期Hotmail带令牌</option>
-                        <option value="2">短期Outlook带令牌</option>
-                        <option value="3">长期Outlook带令牌</option>
-                        <option value="4">长期Hotmail带令牌</option>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+                        <label for="commodityId">邮箱类型</label>
+                        <button onclick="checkStock()" class="small-btn">查询库存</button>
+                    </div>
+                    <select id="commodityId" class="form-control" onchange="updateStockDisplay()">
+                        <option value="1">Hotmail邮箱</option>
+                        <option value="2">Outlook邮箱</option>
                     </select>
+                    <div id="stockDisplay" style="margin-top: 5px; padding: 8px; background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; font-weight: bold; color: #3498db; font-size: 0.85rem;">
+                        点击"查询库存"获取当前库存信息
+                    </div>
                 </div>
                 <div class="input-group">
                     <label for="purchaseNum">购买数量 (1-2000)</label>
                     <input type="number" id="purchaseNum" min="1" max="2000" value="1" class="form-control">
-                </div>
-                <div class="input-group">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                        <label>账户余额</label>
-                        <button onclick="checkBalance()" class="small-btn">查询余额</button>
-                    </div>
-                    <div id="balanceDisplay" style="padding: 8px; background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; font-weight: bold; color: #27ae60;">
-                        点击"查询余额"获取账户信息
-                    </div>
                 </div>
                 <div class="control-group" style="margin-top: 15px;">
                     <button onclick="purchaseEmails()" style="background-color: #27ae60;">购买邮箱</button>
@@ -1781,6 +1782,98 @@
                 balanceDisplay.style.color = '#e74c3c';
                 setStatusMessage('查询余额失败: ' + error.message, 'error');
             }
+        }
+
+        // 查询库存
+        async function checkStock() {
+            const commodityId = document.getElementById('commodityId').value;
+            const stockDisplay = document.getElementById('stockDisplay');
+
+            // 显示加载状态
+            stockDisplay.innerHTML = '正在查询库存...';
+            stockDisplay.style.color = '#3498db';
+            setStatusMessage('正在查询库存...', 'loading');
+
+            try {
+                const apiUrl = 'https://www.888-mail.com/api/getStock.php';
+                const params = new URLSearchParams({
+                    commodity_id: commodityId
+                });
+
+                console.log('发送库存查询请求:', apiUrl, params.toString());
+
+                // 先尝试直接请求，如果失败则使用代理
+                let response;
+                try {
+                    response = await fetch(`${apiUrl}?${params.toString()}`, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                        }
+                    });
+                } catch (corsError) {
+                    console.log('直接请求失败，尝试使用代理:', corsError);
+                    const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+                    response = await fetch(proxyUrl + `${apiUrl}?${params.toString()}`, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                }
+
+                if (!response.ok) {
+                    throw new Error(`请求失败: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('收到库存查询响应:', data);
+
+                // 显示原始响应数据
+                document.getElementById('rawData').textContent = JSON.stringify(data, null, 2);
+
+                // 显示库存信息
+                if (data && data.code === 200 && data.data) {
+                    const stockData = data.data;
+                    const stockNum = stockData.stock || 0;
+                    const productName = stockData.name || '未知';
+                    
+                    stockDisplay.innerHTML = `
+                        产品: ${productName}<br>
+                        库存: ${stockNum} 个
+                    `;
+                    stockDisplay.style.color = stockNum > 0 ? '#27ae60' : '#e74c3c';
+                    setStatusMessage('库存查询成功', 'success');
+                } else if (data && data.num !== undefined) {
+                    // 兼容旧格式
+                    const stockNum = data.num || 0;
+                    const productName = data.name || '未知';
+                    
+                    stockDisplay.innerHTML = `
+                        产品: ${productName}<br>
+                        库存: ${stockNum} 个
+                    `;
+                    stockDisplay.style.color = stockNum > 0 ? '#27ae60' : '#e74c3c';
+                    setStatusMessage('库存查询成功', 'success');
+                } else {
+                    stockDisplay.innerHTML = '库存查询失败：数据格式错误';
+                    stockDisplay.style.color = '#e74c3c';
+                    setStatusMessage('库存查询失败：数据格式错误', 'error');
+                }
+            } catch (error) {
+                console.error('查询库存失败:', error);
+                stockDisplay.innerHTML = `查询失败: ${error.message}`;
+                stockDisplay.style.color = '#e74c3c';
+                setStatusMessage('查询库存失败: ' + error.message, 'error');
+            }
+        }
+
+        // 更新库存显示（当邮箱类型改变时）
+        function updateStockDisplay() {
+            const stockDisplay = document.getElementById('stockDisplay');
+            stockDisplay.innerHTML = '点击"查询库存"获取当前库存信息';
+            stockDisplay.style.color = '#3498db';
         }
 
         // 购买邮箱
