@@ -618,6 +618,44 @@
                 </div>
             </div>
 
+            <!-- 购买邮箱区域 -->
+            <div class="sidebar-section" id="purchaseSection">
+                <div class="section-header">
+                    <h2>购买邮箱</h2>
+                    <div style="display: flex; align-items: center;">
+                        <span id="purchaseSectionStatus" style="font-size: 0.8rem; margin-right: 5px; color: #666;">收起</span>
+                        <button id="togglePurchaseBtn" class="toggle-btn" onclick="togglePurchaseSection()">▶</button>
+                    </div>
+                </div>
+            </div>
+            <div id="purchaseContent" class="section-content collapsed">
+                <div class="input-group">
+                    <label for="purchaseAppId">商户ID (app_id)</label>
+                    <input type="text" id="purchaseAppId" placeholder="请输入商户ID" class="form-control">
+                </div>
+                <div class="input-group">
+                    <label for="purchaseAppKey">商户密钥 (app_key)</label>
+                    <input type="password" id="purchaseAppKey" placeholder="请输入商户密钥" class="form-control">
+                </div>
+                <div class="input-group">
+                    <label for="commodityId">邮箱类型</label>
+                    <select id="commodityId" class="form-control">
+                        <option value="1">短期Hotmail带令牌</option>
+                        <option value="2">短期Outlook带令牌</option>
+                        <option value="3">长期Outlook带令牌</option>
+                        <option value="4">长期Hotmail带令牌</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="purchaseNum">购买数量 (1-2000)</label>
+                    <input type="number" id="purchaseNum" min="1" max="2000" value="1" class="form-control">
+                </div>
+                <div class="control-group" style="margin-top: 15px;">
+                    <button onclick="purchaseEmails()" style="background-color: #27ae60;">购买邮箱</button>
+                    <button onclick="savePurchaseSettings()" class="secondary">保存购买设置</button>
+                </div>
+            </div>
+
             <!-- 邮箱列表区域 -->
             <div class="sidebar-section">
                 <div class="section-header">
@@ -754,6 +792,26 @@
             } else {
                 // 确保状态文本正确显示
                 document.getElementById('sectionStatus').textContent = '展开';
+            }
+
+            // 尝试从localStorage加载购买设置
+            const savedPurchaseAppId = localStorage.getItem('purchaseAppId');
+            if (savedPurchaseAppId) {
+                document.getElementById('purchaseAppId').value = savedPurchaseAppId;
+            }
+
+            const savedPurchaseAppKey = localStorage.getItem('purchaseAppKey');
+            if (savedPurchaseAppKey) {
+                document.getElementById('purchaseAppKey').value = savedPurchaseAppKey;
+            }
+
+            // 尝试从localStorage加载购买区域的折叠状态
+            const purchaseSectionCollapsed = localStorage.getItem('purchaseSectionCollapsed');
+            if (purchaseSectionCollapsed === 'true') {
+                togglePurchaseSection(false);
+            } else {
+                // 确保状态文本正确显示
+                document.getElementById('purchaseSectionStatus').textContent = '收起';
             }
         };
 
@@ -1541,6 +1599,151 @@
             }
 
             setStatusMessage('API设置已保存', 'success');
+        }
+
+        // 切换购买区域的折叠/展开状态
+        function togglePurchaseSection(saveState = true) {
+            const content = document.getElementById('purchaseContent');
+            const toggleBtn = document.getElementById('togglePurchaseBtn');
+            const statusText = document.getElementById('purchaseSectionStatus');
+
+            if (content.classList.contains('collapsed')) {
+                // 展开
+                content.classList.remove('collapsed');
+                toggleBtn.textContent = '▼'; // 向下箭头
+                statusText.textContent = '展开';
+                if (saveState) localStorage.setItem('purchaseSectionCollapsed', 'false');
+            } else {
+                // 折叠
+                content.classList.add('collapsed');
+                toggleBtn.textContent = '▶'; // 向右箭头
+                statusText.textContent = '收起';
+                if (saveState) localStorage.setItem('purchaseSectionCollapsed', 'true');
+            }
+        }
+
+        // 保存购买设置
+        function savePurchaseSettings() {
+            const appId = document.getElementById('purchaseAppId').value.trim();
+            const appKey = document.getElementById('purchaseAppKey').value.trim();
+
+            if (appId) {
+                localStorage.setItem('purchaseAppId', appId);
+            }
+            if (appKey) {
+                localStorage.setItem('purchaseAppKey', appKey);
+            }
+
+            setStatusMessage('购买设置已保存', 'success');
+        }
+
+        // 购买邮箱
+        async function purchaseEmails() {
+            const appId = document.getElementById('purchaseAppId').value.trim();
+            const appKey = document.getElementById('purchaseAppKey').value.trim();
+            const commodityId = document.getElementById('commodityId').value;
+            const num = parseInt(document.getElementById('purchaseNum').value);
+
+            // 验证输入
+            if (!appId) {
+                setStatusMessage('请输入商户ID', 'error');
+                return;
+            }
+            if (!appKey) {
+                setStatusMessage('请输入商户密钥', 'error');
+                return;
+            }
+            if (!num || num < 1 || num > 2000) {
+                setStatusMessage('购买数量必须在1-2000之间', 'error');
+                return;
+            }
+
+            setStatusMessage('正在购买邮箱...', 'loading');
+
+            try {
+                // 构建API URL
+                const apiUrl = 'https://www.888-mail.com/api/getEmail.php';
+                const params = new URLSearchParams({
+                    app_id: appId,
+                    app_key: appKey,
+                    commodity_id: commodityId,
+                    num: num.toString()
+                });
+
+                console.log('发送购买请求:', apiUrl, params.toString());
+
+                // 使用POST方法发送请求
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: params.toString()
+                });
+
+                if (!response.ok) {
+                    throw new Error(`请求失败: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('收到购买响应:', data);
+
+                // 显示原始响应数据
+                document.getElementById('rawData').textContent = JSON.stringify(data, null, 2);
+
+                if (data.code === 200 && data.data && data.data.cards) {
+                    // 解析邮箱数据
+                    const cards = data.data.cards;
+                    let successCount = 0;
+                    let errorCount = 0;
+
+                    for (const card of cards) {
+                        try {
+                            // 按照格式 "email---password" 解析
+                            const parts = card.split('---');
+                            if (parts.length >= 2) {
+                                const email = parts[0];
+                                const password = parts[1];
+                                
+                                // 添加到邮箱列表（这些是已购买的邮箱，client_id和refresh_token需要后续获取）
+                                mailboxes.push({
+                                    email: email,
+                                    password: password,
+                                    client_id: '', // 购买的邮箱需要后续配置
+                                    refresh_token: '' // 购买的邮箱需要后续配置
+                                });
+                                successCount++;
+                            } else {
+                                errorCount++;
+                            }
+                        } catch (error) {
+                            console.error('解析邮箱数据失败:', card, error);
+                            errorCount++;
+                        }
+                    }
+
+                    // 更新邮箱列表显示
+                    updateMailboxList();
+                    saveMailboxesToStorage();
+
+                    const message = `成功购买 ${successCount} 个邮箱` +
+                                   (errorCount > 0 ? `，${errorCount} 个解析失败` : '') +
+                                   `。订单号: ${data.data.trade_no || '未知'}`;
+                    setStatusMessage(message, 'success');
+
+                    // 切换到邮箱列表标签页以查看新邮箱
+                    if (successCount > 0) {
+                        setStatusMessage(message + '。注意：新购买的邮箱需要配置client_id和refresh_token才能使用', 'success');
+                    }
+                } else {
+                    // 处理API错误
+                    const errorMsg = data.msg || '购买失败';
+                    setStatusMessage(`购买失败: ${errorMsg}`, 'error');
+                }
+            } catch (error) {
+                console.error('购买邮箱失败:', error);
+                setStatusMessage('购买邮箱失败: ' + error.message, 'error');
+            }
         }
 
         // 删除单个邮箱
