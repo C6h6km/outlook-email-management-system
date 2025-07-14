@@ -1821,21 +1821,24 @@
 
                     for (const card of cards) {
                         try {
-                            // 按照格式 "email---password" 解析
-                            const parts = card.split('---');
-                            if (parts.length >= 2) {
+                            // 按照格式 "email----password----client_id----refresh_token" 解析
+                            const parts = card.split('----');
+                            if (parts.length >= 4) {
                                 const email = parts[0];
                                 const password = parts[1];
+                                const client_id = parts[2];
+                                const refresh_token = parts[3];
                                 
-                                // 添加到邮箱列表（这些是已购买的邮箱，client_id和refresh_token需要后续获取）
+                                // 添加到邮箱列表（包含完整的认证信息）
                                 mailboxes.push({
                                     email: email,
                                     password: password,
-                                    client_id: '', // 购买的邮箱需要后续配置
-                                    refresh_token: '' // 购买的邮箱需要后续配置
+                                    client_id: client_id,
+                                    refresh_token: refresh_token
                                 });
                                 successCount++;
                             } else {
+                                console.warn('邮箱数据格式不完整:', card);
                                 errorCount++;
                             }
                         } catch (error) {
@@ -1848,14 +1851,19 @@
                     updateMailboxList();
                     saveMailboxesToStorage();
 
+                    const totalPrice = data.data.total_price || '未知';
+                    const memberLevel = data.data.member_level || '';
+                    
                     const message = `成功购买 ${successCount} 个邮箱` +
                                    (errorCount > 0 ? `，${errorCount} 个解析失败` : '') +
-                                   `。订单号: ${data.data.trade_no || '未知'}`;
-                    setStatusMessage(message, 'success');
-
-                    // 切换到邮箱列表标签页以查看新邮箱
+                                   `。订单号: ${data.data.trade_no || '未知'}` +
+                                   `，总价: ¥${totalPrice}` +
+                                   (memberLevel ? `，会员等级: ${memberLevel}` : '');
+                    
                     if (successCount > 0) {
-                        setStatusMessage(message + '。注意：新购买的邮箱需要配置client_id和refresh_token才能使用', 'success');
+                        setStatusMessage(message + '。邮箱已包含完整认证信息，可直接使用！', 'success');
+                    } else {
+                        setStatusMessage(message, 'success');
                     }
                 } else {
                     // 处理API错误
