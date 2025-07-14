@@ -650,7 +650,7 @@
                         <button onclick="checkBalance()" class="small-btn">查询余额</button>
                     </div>
                     <input type="text" id="purchaseAppId" placeholder="请输入商户ID" class="form-control">
-                    <div id="balanceDisplay" style="margin-top: 3px; font-size: 0.8rem; color: #27ae60; font-weight: bold;">
+                    <div id="balanceDisplay" style="margin-top: 3px; font-size: 0.8rem; color: #3498db; font-weight: bold;">
                         点击"查询余额"获取账户信息
                     </div>
                 </div>
@@ -664,10 +664,12 @@
                         <button onclick="checkStock()" class="small-btn">查询库存</button>
                     </div>
                     <select id="commodityId" class="form-control" onchange="updateStockDisplay()">
-                        <option value="1">Hotmail邮箱</option>
-                        <option value="2">Outlook邮箱</option>
+                        <option value="1">短期Hotmail带令牌</option>
+                        <option value="2">短期Outlook带令牌</option>
+                        <option value="3">长期Outlook带令牌</option>
+                        <option value="4">长期Hotmail带令牌</option>
                     </select>
-                    <div id="stockDisplay" style="margin-top: 5px; padding: 8px; background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; font-weight: bold; color: #3498db; font-size: 0.85rem;">
+                    <div id="stockDisplay" style="margin-top: 3px; font-size: 0.8rem; color: #3498db; font-weight: bold;">
                         点击"查询库存"获取当前库存信息
                     </div>
                 </div>
@@ -1789,6 +1791,14 @@
             const commodityId = document.getElementById('commodityId').value;
             const stockDisplay = document.getElementById('stockDisplay');
 
+            // 根据邮箱类型判断查询hotmail还是outlook
+            let queryId;
+            if (commodityId === '1' || commodityId === '4') {
+                queryId = '1'; // Hotmail
+            } else if (commodityId === '2' || commodityId === '3') {
+                queryId = '2'; // Outlook
+            }
+
             // 显示加载状态
             stockDisplay.innerHTML = '正在查询库存...';
             stockDisplay.style.color = '#3498db';
@@ -1797,7 +1807,7 @@
             try {
                 const apiUrl = 'https://www.888-mail.com/api/getStock.php';
                 const params = new URLSearchParams({
-                    commodity_id: commodityId
+                    commodity_id: queryId
                 });
 
                 console.log('发送库存查询请求:', apiUrl, params.toString());
