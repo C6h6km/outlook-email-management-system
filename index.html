@@ -125,9 +125,9 @@
         }
 
         .section-content {
-            overflow: hidden;
+            overflow-y: auto;
             transition: all 0.3s ease;
-            max-height: 1000px; /* 足够大的高度来容纳内容 */
+            max-height: 300px; /* 限制高度，避免挤压其他区域 */
             border-top: 1px solid #ddd;
             padding: 10px;
             margin-bottom: 0;
@@ -140,6 +140,7 @@
             border: 0;
             opacity: 0;
             visibility: hidden;
+            overflow: hidden;
         }
 
         .input-group {
@@ -193,9 +194,23 @@
             overflow-y: auto;
             padding: 10px;
             list-style-type: none;
-            max-height: calc(100vh - 102px); /* 减去头部高度和工具栏高度 */
             margin: 0;
             border-top: 1px solid #ddd;
+            min-height: 200px; /* 确保邮箱列表有最小高度 */
+        }
+
+        .mailbox-list-content {
+            flex: 1;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            border-top: 1px solid #ddd;
+        }
+
+        .mailbox-list-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+            visibility: hidden;
+            overflow: hidden;
         }
 
         .mailbox-item {
@@ -666,16 +681,21 @@
             </div>
 
             <!-- 邮箱列表区域 -->
-            <div class="sidebar-section">
+            <div class="sidebar-section" id="mailboxSection">
                 <div class="section-header">
                     <h2>邮箱列表</h2>
-                    <button onclick="clearMailboxes()" class="small-btn">清除所有邮箱</button>
+                    <div style="display: flex; align-items: center;">
+                        <span id="mailboxSectionStatus" style="font-size: 0.8rem; margin-right: 5px; color: #666;">展开</span>
+                        <button id="toggleMailboxBtn" class="toggle-btn" onclick="toggleMailboxSection()">▼</button>
+                    </div>
                 </div>
             </div>
 
-            <ul id="mailboxList" class="mailbox-list" style="position: relative; height: calc(100% - 42px);">
-                <!-- 邮箱列表项将通过JS动态添加 -->
-            </ul>
+            <div id="mailboxContent" class="mailbox-list-content">
+                <ul id="mailboxList" class="mailbox-list" style="position: relative;">
+                    <!-- 邮箱列表项将通过JS动态添加 -->
+                </ul>
+            </div>
         </aside>
 
         <!-- 邮件列表区域 -->
@@ -822,6 +842,15 @@
                 // 确保状态文本正确显示
                 document.getElementById('purchaseSectionStatus').textContent = '收起';
             }
+
+            // 尝试从localStorage加载邮箱列表区域的折叠状态
+            const mailboxSectionCollapsed = localStorage.getItem('mailboxSectionCollapsed');
+            if (mailboxSectionCollapsed === 'true') {
+                toggleMailboxSection(false);
+            } else {
+                // 确保状态文本正确显示
+                document.getElementById('mailboxSectionStatus').textContent = '展开';
+            }
         };
 
         // 设置拖曳上传功能
@@ -910,6 +939,27 @@
                 toggleBtn.textContent = '▶'; // 向右箭头
                 statusText.textContent = '收起';
                 if (saveState) localStorage.setItem('importSectionCollapsed', 'true');
+            }
+        }
+
+        // 切换邮箱列表区域的折叠/展开状态
+        function toggleMailboxSection(saveState = true) {
+            const content = document.getElementById('mailboxContent');
+            const toggleBtn = document.getElementById('toggleMailboxBtn');
+            const statusText = document.getElementById('mailboxSectionStatus');
+
+            if (content.classList.contains('collapsed')) {
+                // 展开
+                content.classList.remove('collapsed');
+                toggleBtn.textContent = '▼'; // 向下箭头
+                statusText.textContent = '展开';
+                if (saveState) localStorage.setItem('mailboxSectionCollapsed', 'false');
+            } else {
+                // 折叠
+                content.classList.add('collapsed');
+                toggleBtn.textContent = '▶'; // 向右箭头
+                statusText.textContent = '收起';
+                if (saveState) localStorage.setItem('mailboxSectionCollapsed', 'true');
             }
         }
 
@@ -1080,16 +1130,6 @@
             loadEmailList();
         }
 
-        // 清除所有邮箱
-        function clearMailboxes() {
-            if (confirm('确定要清除所有邮箱信息吗？')) {
-                mailboxes = [];
-                selectedMailboxIndex = -1;
-                updateMailboxList();
-                saveMailboxesToStorage();
-                setStatusMessage('已清除所有邮箱', 'success');
-            }
-        }
 
         // 获取最新邮件
         async function fetchEmail() {
