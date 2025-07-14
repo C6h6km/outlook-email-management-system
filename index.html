@@ -650,6 +650,15 @@
                     <label for="purchaseNum">购买数量 (1-2000)</label>
                     <input type="number" id="purchaseNum" min="1" max="2000" value="1" class="form-control">
                 </div>
+                <div class="input-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                        <label>账户余额</label>
+                        <button onclick="checkBalance()" class="small-btn">查询余额</button>
+                    </div>
+                    <div id="balanceDisplay" style="padding: 8px; background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; font-weight: bold; color: #27ae60;">
+                        点击"查询余额"获取账户信息
+                    </div>
+                </div>
                 <div class="control-group" style="margin-top: 15px;">
                     <button onclick="purchaseEmails()" style="background-color: #27ae60;">购买邮箱</button>
                     <button onclick="savePurchaseSettings()" class="secondary">保存购买设置</button>
@@ -1637,6 +1646,103 @@
             setStatusMessage('购买设置已保存', 'success');
         }
 
+        // 查询余额
+        async function checkBalance() {
+            const appId = document.getElementById('purchaseAppId').value.trim();
+            const appKey = document.getElementById('purchaseAppKey').value.trim();
+            const balanceDisplay = document.getElementById('balanceDisplay');
+
+            // 验证输入
+            if (!appId) {
+                setStatusMessage('请输入商户ID', 'error');
+                balanceDisplay.innerHTML = '请先输入商户ID';
+                balanceDisplay.style.color = '#e74c3c';
+                return;
+            }
+            if (!appKey) {
+                setStatusMessage('请输入商户密钥', 'error');
+                balanceDisplay.innerHTML = '请先输入商户密钥';
+                balanceDisplay.style.color = '#e74c3c';
+                return;
+            }
+
+            // 显示加载状态
+            balanceDisplay.innerHTML = '正在查询余额...';
+            balanceDisplay.style.color = '#3498db';
+            setStatusMessage('正在查询余额...', 'loading');
+
+            try {
+                // 使用代理服务来解决CORS问题
+                const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+                const apiUrl = 'https://www.888-mail.com/api/login.php';
+                const params = new URLSearchParams({
+                    app_id: appId,
+                    app_key: appKey
+                });
+
+                console.log('发送余额查询请求:', apiUrl, params.toString());
+
+                // 先尝试直接请求，如果失败则使用备用方案
+                let response;
+                try {
+                    // 使用POST方法发送请求
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: params.toString()
+                    });
+                } catch (corsError) {
+                    console.log('直接请求失败，尝试使用代理:', corsError);
+                    // 如果CORS失败，尝试使用代理
+                    response = await fetch(proxyUrl + apiUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: params.toString()
+                    });
+                }
+
+                if (!response.ok) {
+                    throw new Error(`请求失败: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('收到余额查询响应:', data);
+
+                // 显示原始响应数据
+                document.getElementById('rawData').textContent = JSON.stringify(data, null, 2);
+
+                if (data.code === 200 && data.data) {
+                    // 成功获取余额信息
+                    const balance = data.data.balance || '0.00';
+                    const username = data.data.username || '未知用户';
+                    const userId = data.data.id || '未知';
+                    
+                    balanceDisplay.innerHTML = `
+                        用户: ${username} (ID: ${userId})<br>
+                        余额: ¥${balance}
+                    `;
+                    balanceDisplay.style.color = '#27ae60';
+                    setStatusMessage('余额查询成功', 'success');
+                } else {
+                    // 处理API错误
+                    const errorMsg = data.message || '查询失败';
+                    balanceDisplay.innerHTML = `查询失败: ${errorMsg}`;
+                    balanceDisplay.style.color = '#e74c3c';
+                    setStatusMessage(`余额查询失败: ${errorMsg}`, 'error');
+                }
+            } catch (error) {
+                console.error('查询余额失败:', error);
+                balanceDisplay.innerHTML = `查询失败: ${error.message}`;
+                balanceDisplay.style.color = '#e74c3c';
+                setStatusMessage('查询余额失败: ' + error.message, 'error');
+            }
+        }
+
         // 购买邮箱
         async function purchaseEmails() {
             const appId = document.getElementById('purchaseAppId').value.trim();
@@ -1661,7 +1767,8 @@
             setStatusMessage('正在购买邮箱...', 'loading');
 
             try {
-                // 构建API URL
+                // 使用代理服务来解决CORS问题
+                const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
                 const apiUrl = 'https://www.888-mail.com/api/getEmail.php';
                 const params = new URLSearchParams({
                     app_id: appId,
@@ -1672,14 +1779,29 @@
 
                 console.log('发送购买请求:', apiUrl, params.toString());
 
-                // 使用POST方法发送请求
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: params.toString()
-                });
+                // 先尝试直接请求，如果失败则使用备用方案
+                let response;
+                try {
+                    // 使用POST方法发送请求
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: params.toString()
+                    });
+                } catch (corsError) {
+                    console.log('直接请求失败，尝试使用代理:', corsError);
+                    // 如果CORS失败，尝试使用代理
+                    response = await fetch(proxyUrl + apiUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: params.toString()
+                    });
+                }
 
                 if (!response.ok) {
                     throw new Error(`请求失败: ${response.status} ${response.statusText}`);
