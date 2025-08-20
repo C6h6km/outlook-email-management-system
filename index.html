@@ -957,8 +957,12 @@
             }
 
             const savedApiBaseUrl = localStorage.getItem('apiBaseUrl');
-            if (savedApiBaseUrl) {
-                document.getElementById('apiBaseUrl').value = savedApiBaseUrl;
+            const apiBaseInput = document.getElementById('apiBaseUrl');
+            if (savedApiBaseUrl && savedApiBaseUrl.trim() !== '') {
+                apiBaseInput.value = savedApiBaseUrl;
+            } else {
+                // 默认内置地址，用户仍可修改
+                apiBaseInput.value = 'https://api.jdonx.tech/api';
             }
 
             // 尝试从localStorage加载设置区域的折叠状态
