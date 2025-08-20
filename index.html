@@ -52,8 +52,14 @@
             border-right: 1px solid #ddd;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
             height: calc(100vh - 60px); /* 减去头部高度 */
+        }
+        .sidebar {
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        .email-sidebar {
+            overflow: hidden;
         }
 
         /* 统一所有区域的边框样式 */
@@ -84,10 +90,19 @@
         }
 
         /* 统一所有区域的内部分界线样式 */
-        .sidebar-section, .main-toolbar, .tabs, .email-sidebar .sidebar-section {
+        .sidebar-section, .email-sidebar .sidebar-section {
             padding: 10px;
             border-bottom: 1px solid #ddd;
-            height: 42px; /* 固定高度确保一致性 */
+            min-height: 42px; /* 允许自适应高度，避免遮挡 */
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+        }
+
+        .main-toolbar, .tabs {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            height: 42px; /* 保持固定高度 */
             box-sizing: border-box;
             display: flex;
             align-items: center;
@@ -124,6 +139,25 @@
             background: none;
         }
 
+
+        /* Ensure the first two sections expand fully when opened */
+        #importContent:not(.collapsed),
+        #purchaseContent:not(.collapsed) {
+            max-height: none;
+            overflow: visible;
+        }
+
+
+        /* Full expand for mailbox list section; left sidebar handles scrolling */
+        #mailboxContent:not(.collapsed) {
+            flex: 0 0 auto;
+            overflow: visible;
+        }
+        .mailbox-list {
+            overflow: visible;
+            max-height: none;
+        }
+
         .section-content {
             overflow-y: auto;
             transition: all 0.3s ease;
@@ -131,6 +165,7 @@
             border-top: 1px solid #ddd;
             padding: 10px;
             margin-bottom: 0;
+            flex: 0 0 auto; /* 防止与其他区域互相遮挡，保持自然高度 */
         }
 
         .section-content.collapsed {
@@ -578,6 +613,66 @@
             color: #777;
             margin-top: 5px;
         }
+        /* Improved, consistent scrollbar styling */
+        .mailbox-list,
+        .email-list,
+        .section-content,
+        .email-viewer,
+        .raw-data {
+            scrollbar-width: thin; /* Firefox */
+            scrollbar-color: #b8c2cc transparent;
+            scrollbar-gutter: stable both-edges;
+        }
+
+        /* WebKit-based browsers (Chrome, Edge, Safari) */
+        .mailbox-list::-webkit-scrollbar,
+        .email-list::-webkit-scrollbar,
+        .section-content::-webkit-scrollbar,
+        .email-viewer::-webkit-scrollbar,
+        .raw-data::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .mailbox-list::-webkit-scrollbar-track,
+        .email-list::-webkit-scrollbar-track,
+        .section-content::-webkit-scrollbar-track,
+        .email-viewer::-webkit-scrollbar-track,
+        .raw-data::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .mailbox-list::-webkit-scrollbar-thumb,
+        .email-list::-webkit-scrollbar-thumb,
+        .section-content::-webkit-scrollbar-thumb,
+        .email-viewer::-webkit-scrollbar-thumb,
+        .raw-data::-webkit-scrollbar-thumb {
+            background-color: #c4ccd5;
+            border-radius: 8px;
+            border: 2px solid transparent; /* creates inner padding */
+            background-clip: content-box;
+        }
+
+        .mailbox-list:hover::-webkit-scrollbar-thumb,
+        .email-list:hover::-webkit-scrollbar-thumb,
+        .section-content:hover::-webkit-scrollbar-thumb,
+        .email-viewer:hover::-webkit-scrollbar-thumb,
+        .raw-data:hover::-webkit-scrollbar-thumb {
+            background-color: #a9b4bf;
+        }
+
+        /* Avoid content hidden behind scrollbar and reduce scroll chaining */
+        .mailbox-list,
+        .email-list {
+            padding-right: 4px;
+            overscroll-behavior: contain;
+        }
+        .section-content,
+        .email-viewer,
+        .raw-data {
+            overscroll-behavior: contain;
+        }
+
     </style>
 </head>
 <body>
@@ -1764,7 +1859,7 @@
                     const balance = data.data.balance || '0.00';
                     const username = data.data.username || '未知用户';
                     const userId = data.data.id || '未知';
-                    
+
                     balanceDisplay.innerHTML = `
                         用户: ${username} (ID: ${userId})<br>
                         余额: ¥${balance}
@@ -1848,7 +1943,7 @@
                     const stockData = data.data;
                     const stockNum = stockData.stock || 0;
                     const productName = stockData.name || '未知';
-                    
+
                     stockDisplay.innerHTML = `
                         产品: ${productName}<br>
                         库存: ${stockNum} 个
@@ -1859,7 +1954,7 @@
                     // 兼容旧格式
                     const stockNum = data.num || 0;
                     const productName = data.name || '未知';
-                    
+
                     stockDisplay.innerHTML = `
                         产品: ${productName}<br>
                         库存: ${stockNum} 个
@@ -1971,7 +2066,7 @@
                                 const password = parts[1];
                                 const client_id = parts[2];
                                 const refresh_token = parts[3];
-                                
+
                                 // 添加到邮箱列表（包含完整的认证信息）
                                 mailboxes.push({
                                     email: email,
@@ -1996,13 +2091,13 @@
 
                     const totalPrice = data.data.total_price || '未知';
                     const memberLevel = data.data.member_level || '';
-                    
+
                     const message = `成功购买 ${successCount} 个邮箱` +
                                    (errorCount > 0 ? `，${errorCount} 个解析失败` : '') +
                                    `。订单号: ${data.data.trade_no || '未知'}` +
                                    `，总价: ¥${totalPrice}` +
                                    (memberLevel ? `，会员等级: ${memberLevel}` : '');
-                    
+
                     if (successCount > 0) {
                         setStatusMessage(message + '。邮箱已包含完整认证信息，可直接使用！', 'success');
                     } else {
