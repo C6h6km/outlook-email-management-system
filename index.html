@@ -741,28 +741,29 @@
             <div id="purchaseContent" class="section-content collapsed">
                 <div class="input-group">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
-                        <label for="purchaseAppId">商户ID (app_id)</label>
+                        <label>账户余额</label>
                         <button onclick="checkBalance()" class="small-btn">查询余额</button>
                     </div>
-                    <input type="text" id="purchaseAppId" placeholder="请输入商户ID" class="form-control">
                     <div id="balanceDisplay" style="margin-top: 3px; font-size: 0.8rem; color: #3498db; font-weight: bold;">
                         点击"查询余额"获取账户信息
                     </div>
                 </div>
                 <div class="input-group">
-                    <label for="purchaseAppKey">商户密钥 (app_key)</label>
-                    <input type="password" id="purchaseAppKey" placeholder="请输入商户密钥" class="form-control">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+                        <label for="purchaseLibrary">选择仓库</label>
+                    </div>
+                    <select id="purchaseLibrary" class="form-control" onchange="onPurchaseLibraryChange()">
+                        <option value="1">一号库</option>
+                        <option value="2">二号库</option>
+                    </select>
                 </div>
                 <div class="input-group">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
-                        <label for="commodityId">邮箱类型</label>
+                        <label for="commodityId">商品</label>
                         <button onclick="checkStock()" class="small-btn">查询库存</button>
                     </div>
                     <select id="commodityId" class="form-control" onchange="updateStockDisplay()">
-                        <option value="1">短期Hotmail带令牌</option>
-                        <option value="2">短期Outlook带令牌</option>
-                        <option value="3">长期Outlook带令牌</option>
-                        <option value="4">长期Hotmail带令牌</option>
+                        <!-- 由脚本根据仓库动态填充 -->
                     </select>
                     <div id="stockDisplay" style="margin-top: 3px; font-size: 0.8rem; color: #3498db; font-weight: bold;">
                         点击"查询库存"获取当前库存信息
@@ -774,7 +775,7 @@
                 </div>
                 <div class="control-group" style="margin-top: 15px;">
                     <button onclick="purchaseEmails()" style="background-color: #27ae60;">购买邮箱</button>
-                    <button onclick="savePurchaseSettings()" class="secondary">保存购买设置</button>
+
                 </div>
             </div>
 
@@ -882,6 +883,54 @@
         let selectedEmailIndex = -1;
 
         // 初始化
+
+        // 采购仓库与商品映射（根据官方文档同步一号库/二号库）
+        const LIBRARIES = {
+            '1': { // 一号库 /api
+                base: 'https://www.888-mail.com/api',
+                items: [
+                    { id: '1', name: '短效hotmail带令牌' },
+                    { id: '2', name: '短效outlook带令牌' },
+                    { id: '14', name: '德国短效outlook带令牌' },
+                    { id: '15', name: '意大利短效outlook带令牌' },
+                ],
+            },
+            '2': { // 二号库 /api1
+                base: 'https://www.888-mail.com/api1',
+                items: [
+                    { id: '12', name: '短效hotmail网页号' },
+                    { id: '13', name: '短效outlook网页号' },
+                    { id: '3', name: '短效hotmail带令牌' },
+                    { id: '4', name: '短效outlook带令牌' },
+                ],
+            },
+        };
+
+        function initPurchaseLibrary() {
+            const libSelect = document.getElementById('purchaseLibrary');
+            const saved = localStorage.getItem('purchaseLibrary') || '1';
+            libSelect.value = saved;
+            populateCommodities(saved);
+        }
+
+        function onPurchaseLibraryChange() {
+            const lib = document.getElementById('purchaseLibrary').value;
+            localStorage.setItem('purchaseLibrary', lib);
+            populateCommodities(lib);
+            updateStockDisplay();
+        }
+
+        function populateCommodities(lib) {
+            const select = document.getElementById('commodityId');
+            select.innerHTML = '';
+            (LIBRARIES[lib]?.items || []).forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = `${item.name}（ID:${item.id}）`;
+                select.appendChild(opt);
+            });
+        }
+
         window.onload = function() {
             // 为文件输入添加事件监听器
             document.getElementById('fileInput').addEventListener('change', handleFileInput);
@@ -921,16 +970,11 @@
                 document.getElementById('sectionStatus').textContent = '展开';
             }
 
-            // 尝试从localStorage加载购买设置
-            const savedPurchaseAppId = localStorage.getItem('purchaseAppId');
-            if (savedPurchaseAppId) {
-                document.getElementById('purchaseAppId').value = savedPurchaseAppId;
-            }
+            // 已移除商户ID与密钥输入框，使用内置默认凭证
 
-            const savedPurchaseAppKey = localStorage.getItem('purchaseAppKey');
-            if (savedPurchaseAppKey) {
-                document.getElementById('purchaseAppKey').value = savedPurchaseAppKey;
-            }
+                // 初始化采购仓库与商品
+                initPurchaseLibrary();
+
 
             // 尝试从localStorage加载购买区域的折叠状态
             const purchaseSectionCollapsed = localStorage.getItem('purchaseSectionCollapsed');
@@ -1192,11 +1236,19 @@
             mailboxes.forEach((mailbox, index) => {
                 const item = document.createElement('li');
                 item.className = 'mailbox-item' + (index === selectedMailboxIndex ? ' selected' : '');
-                item.onclick = (e) => {
-                    // 确保点击删除按钮时不选择邮箱
-                    if (!e.target.classList.contains('delete-mailbox')) {
-                        selectMailbox(index);
+                // 单击复制邮箱到剪贴板，双击进入邮箱
+                item.onclick = async (e) => {
+                    if (e.target.classList.contains('delete-mailbox')) return;
+                    try {
+                        await navigator.clipboard.writeText(mailbox.email);
+                        setStatusMessage(`已复制: ${mailbox.email}`, 'success');
+                    } catch (err) {
+                        setStatusMessage('复制失败，请手动复制', 'error');
                     }
+                };
+                item.ondblclick = (e) => {
+                    if (e.target.classList.contains('delete-mailbox')) return;
+                    selectMailbox(index);
                 };
 
                 const emailDiv = document.createElement('div');
@@ -1769,40 +1821,23 @@
             }
         }
 
-        // 保存购买设置
+        // 保存购买设置（已移除输入，保留函数占位，如需扩展其他设置可复用）
         function savePurchaseSettings() {
-            const appId = document.getElementById('purchaseAppId').value.trim();
-            const appKey = document.getElementById('purchaseAppKey').value.trim();
-
-            if (appId) {
-                localStorage.setItem('purchaseAppId', appId);
-            }
-            if (appKey) {
-                localStorage.setItem('purchaseAppKey', appKey);
-            }
-
-            setStatusMessage('购买设置已保存', 'success');
+            setStatusMessage('设置已保存', 'success');
         }
 
         // 查询余额
         async function checkBalance() {
-            const appId = document.getElementById('purchaseAppId').value.trim();
-            const appKey = document.getElementById('purchaseAppKey').value.trim();
+            // 已移除输入框，使用默认凭证
+            const appId = '';
+            const appKey = '';
             const balanceDisplay = document.getElementById('balanceDisplay');
 
-            // 验证输入
-            if (!appId) {
-                setStatusMessage('请输入商户ID', 'error');
-                balanceDisplay.innerHTML = '请先输入商户ID';
-                balanceDisplay.style.color = '#e74c3c';
-                return;
-            }
-            if (!appKey) {
-                setStatusMessage('请输入商户密钥', 'error');
-                balanceDisplay.innerHTML = '请先输入商户密钥';
-                balanceDisplay.style.color = '#e74c3c';
-                return;
-            }
+            // 内置默认凭证（可被输入覆盖）
+            const defaultAppId = '1097';
+            const defaultAppKey = 'A2380737CA36CC61';
+            const finalAppId = appId || defaultAppId;
+            const finalAppKey = appKey || defaultAppKey;
 
             // 显示加载状态
             balanceDisplay.innerHTML = '正在查询余额...';
@@ -1810,39 +1845,26 @@
             setStatusMessage('正在查询余额...', 'loading');
 
             try {
-                // 使用代理服务来解决CORS问题
-                const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
-                const apiUrl = 'https://www.888-mail.com/api/login.php';
+                const currentLib = document.getElementById('purchaseLibrary').value || '1';
+                const base = LIBRARIES[currentLib].base;
+                const apiUrl = `${base}/login.php`;
                 const params = new URLSearchParams({
-                    app_id: appId,
-                    app_key: appKey
+                    app_id: finalAppId,
+                    app_key: finalAppKey
                 });
 
                 console.log('发送余额查询请求:', apiUrl, params.toString());
 
-                // 先尝试直接请求，如果失败则使用备用方案
-                let response;
-                try {
-                    // 使用POST方法发送请求
-                    response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                        },
-                        body: params.toString()
-                    });
-                } catch (corsError) {
-                    console.log('直接请求失败，尝试使用代理:', corsError);
-                    // 如果CORS失败，尝试使用代理
-                    response = await fetch(proxyUrl + apiUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
-                        body: params.toString()
-                    });
-                }
+                // 强制通过代理以避免CORS
+                const proxyUrl = 'https://cors-header-proxy.bdkm656.workers.dev/';
+                const response = await fetch(proxyUrl + apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: params.toString()
+                });
 
                 if (!response.ok) {
                     throw new Error(`请求失败: ${response.status} ${response.statusText}`);
@@ -1886,13 +1908,8 @@
             const commodityId = document.getElementById('commodityId').value;
             const stockDisplay = document.getElementById('stockDisplay');
 
-            // 根据邮箱类型判断查询hotmail还是outlook
-            let queryId;
-            if (commodityId === '1' || commodityId === '4') {
-                queryId = '1'; // Hotmail
-            } else if (commodityId === '2' || commodityId === '3') {
-                queryId = '2'; // Outlook
-            }
+            // 直接使用所选商品ID
+            const queryId = commodityId;
 
             // 显示加载状态
             stockDisplay.innerHTML = '正在查询库存...';
@@ -1900,33 +1917,24 @@
             setStatusMessage('正在查询库存...', 'loading');
 
             try {
-                const apiUrl = 'https://www.888-mail.com/api/getStock.php';
+                const currentLib = document.getElementById('purchaseLibrary').value || '1';
+                const base = LIBRARIES[currentLib].base;
+                const apiUrl = `${base}/getStock.php`;
                 const params = new URLSearchParams({
                     commodity_id: queryId
                 });
 
                 console.log('发送库存查询请求:', apiUrl, params.toString());
 
-                // 先尝试直接请求，如果失败则使用代理
-                let response;
-                try {
-                    response = await fetch(`${apiUrl}?${params.toString()}`, {
-                        method: 'GET',
-                        headers: {
-                            'Accept': 'application/json',
-                        }
-                    });
-                } catch (corsError) {
-                    console.log('直接请求失败，尝试使用代理:', corsError);
-                    const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
-                    response = await fetch(proxyUrl + `${apiUrl}?${params.toString()}`, {
-                        method: 'GET',
-                        headers: {
-                            'Accept': 'application/json',
-                            'X-Requested-With': 'XMLHttpRequest'
-                        }
-                    });
-                }
+                // 强制通过代理以避免CORS
+                const proxyUrl = 'https://cors-header-proxy.bdkm656.workers.dev/';
+                const response = await fetch(`${proxyUrl}${apiUrl}?${params.toString()}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
 
                 if (!response.ok) {
                     throw new Error(`请求失败: ${response.status} ${response.statusText}`);
@@ -1983,20 +1991,15 @@
 
         // 购买邮箱
         async function purchaseEmails() {
-            const appId = document.getElementById('purchaseAppId').value.trim();
-            const appKey = document.getElementById('purchaseAppKey').value.trim();
+            // 已移除输入框，使用默认凭证（可在代码中配置）
+            const appId = '';
+            const appKey = '';
             const commodityId = document.getElementById('commodityId').value;
             const num = parseInt(document.getElementById('purchaseNum').value);
 
-            // 验证输入
-            if (!appId) {
-                setStatusMessage('请输入商户ID', 'error');
-                return;
-            }
-            if (!appKey) {
-                setStatusMessage('请输入商户密钥', 'error');
-                return;
-            }
+            // 内置默认凭证（可被输入覆盖）
+            const finalAppId = appId || '1097';
+            const finalAppKey = appKey || 'A2380737CA36CC61';
             if (!num || num < 1 || num > 2000) {
                 setStatusMessage('购买数量必须在1-2000之间', 'error');
                 return;
@@ -2005,41 +2008,28 @@
             setStatusMessage('正在购买邮箱...', 'loading');
 
             try {
-                // 使用代理服务来解决CORS问题
-                const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
-                const apiUrl = 'https://www.888-mail.com/api/getEmail.php';
+                const currentLib = document.getElementById('purchaseLibrary').value || '1';
+                const base = LIBRARIES[currentLib].base;
+                const apiUrl = `${base}/getEmail.php`;
                 const params = new URLSearchParams({
-                    app_id: appId,
-                    app_key: appKey,
+                    app_id: finalAppId,
+                    app_key: finalAppKey,
                     commodity_id: commodityId,
                     num: num.toString()
                 });
 
                 console.log('发送购买请求:', apiUrl, params.toString());
 
-                // 先尝试直接请求，如果失败则使用备用方案
-                let response;
-                try {
-                    // 使用POST方法发送请求
-                    response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                        },
-                        body: params.toString()
-                    });
-                } catch (corsError) {
-                    console.log('直接请求失败，尝试使用代理:', corsError);
-                    // 如果CORS失败，尝试使用代理
-                    response = await fetch(proxyUrl + apiUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
-                        body: params.toString()
-                    });
-                }
+                // 强制通过代理以避免CORS
+                const proxyUrl = 'https://cors-header-proxy.bdkm656.workers.dev/';
+                const response = await fetch(`${proxyUrl}${apiUrl}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: params.toString()
+                });
 
                 if (!response.ok) {
                     throw new Error(`请求失败: ${response.status} ${response.statusText}`);
