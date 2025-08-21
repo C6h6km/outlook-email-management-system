@@ -3,37 +3,17 @@ const cors = require('cors');
 const helmet = require('helmet');
 const dotenv = require('dotenv');
 const { createClient } = require('@supabase/supabase-js');
-const fs = require('fs');
-const path = require('path');
+
 
 // 加载环境变量
 dotenv.config();
 
-// 从环境变量或key.txt文件读取Supabase配置
+// 从环境变量读取 Supabase 配置（生产环境务必在 Vercel 配置）
 let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 let supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// 如果环境变量不存在，尝试从key.txt文件读取（本地开发）
 if (!supabaseUrl || !supabaseKey) {
-    try {
-        const keyContent = fs.readFileSync(path.join(__dirname, 'key.txt'), 'utf8');
-        const lines = keyContent.split('\n');
-
-        for (const line of lines) {
-            if (line.includes('NEXT_PUBLIC_SUPABASE_URL=')) {
-                supabaseUrl = line.split('=')[1].replace(/"/g, '');
-            }
-            if (line.includes('SUPABASE_SERVICE_ROLE_KEY=')) {
-                supabaseKey = line.split('=')[1].replace(/"/g, '');
-            }
-        }
-    } catch (error) {
-        console.log('key.txt文件不存在，使用环境变量配置');
-    }
-}
-
-if (!supabaseUrl || !supabaseKey) {
-    console.error('Supabase配置不完整，请设置环境变量或创建key.txt文件');
+    console.error('Supabase配置不完整：请设置 NEXT_PUBLIC_SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY');
     process.exit(1);
 }
 
