@@ -2179,6 +2179,7 @@
                 if (data.code === 200 && data.data && data.data.cards) {
                     // 解析邮箱数据
                     const cards = data.data.cards;
+                    const newMailboxes = [];
                     let successCount = 0;
                     let errorCount = 0;
 
@@ -2193,12 +2194,14 @@
                                 const refresh_token = parts[3];
 
                                 // 添加到邮箱列表（包含完整的认证信息）
-                                mailboxes.push({
+                                const mailboxObj = {
                                     email: email,
                                     password: password,
                                     client_id: client_id,
                                     refresh_token: refresh_token
-                                });
+                                };
+                                mailboxes.push(mailboxObj);
+                                newMailboxes.push(mailboxObj);
                                 successCount++;
                             } else {
                                 console.warn('邮箱数据格式不完整:', card);
@@ -2212,7 +2215,7 @@
 
                     // 更新邮箱列表显示
                     updateMailboxList();
-                    saveMailboxesToStorage();
+                    await saveMailboxesToStorage(newMailboxes);
 
                     const totalPrice = data.data.total_price || '未知';
                     const memberLevel = data.data.member_level || '';
