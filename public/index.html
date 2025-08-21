@@ -680,7 +680,7 @@
         <!-- 头部 -->
         <header class="header">
             <h1>Easy Outlook----批量令牌邮箱快捷管理</h1>
-            <div style="display:flex; align-items:center; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px; display:none;">
                 <div id="statusMessage" class="status-message"></div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <label for="apiKeyInput" style="font-size:0.9rem; color:#ecf0f1;">API Key:</label>
@@ -1200,7 +1200,6 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                            'X-API-Key': (localStorage.getItem('apiKey') || ''),
                     },
                     body: JSON.stringify({
                         mailboxes: newMailboxes
@@ -1223,7 +1222,7 @@
         // 从Supabase服务器加载邮箱
         async function loadMailboxesFromSupabase() {
             try {
-                const response = await fetch(`${SUPABASE_API_BASE}/mailboxes`, { headers: { 'X-API-Key': (localStorage.getItem('apiKey') || '') } });
+                const response = await fetch(`${SUPABASE_API_BASE}/mailboxes`, {});
                 const result = await response.json();
 
                 if (!result.success) {
@@ -1242,7 +1241,7 @@
             try {
                 const response = await fetch(`${SUPABASE_API_BASE}/mailboxes/${mailboxId}`, {
                     method: 'DELETE',
-                    headers: { 'X-API-Key': (localStorage.getItem('apiKey') || '') }
+                    headers: {}
                 });
 
                 const result = await response.json();

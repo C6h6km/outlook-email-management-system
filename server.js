@@ -45,26 +45,10 @@ app.use(cors({
     },
     credentials: false,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key']
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// API Key 保护（除健康检查外）
-app.use('/api', (req, res, next) => {
-    if (req.path === '/health') return next();
 
-    const requireKey = process.env.REQUIRE_API_KEY !== 'false';
-    const provided = req.headers['x-api-key'] || req.query.api_key;
-
-    if (!requireKey) return next();
-
-    const expected = process.env.API_KEY;
-    if (!expected) {
-        console.warn('[SECURITY] API_KEY 未配置，临时放行（仅用于开发环境）。');
-        return next();
-    }
-    if (provided === expected) return next();
-    return res.status(401).json({ success: false, error: 'Unauthorized' });
-});
 app.use(express.json());
 app.use(express.static('public'));
 
