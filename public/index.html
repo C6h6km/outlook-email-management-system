@@ -680,39 +680,35 @@
         <!-- 头部 -->
         <header class="header">
             <h1>Easy Outlook----批量令牌邮箱快捷管理</h1>
-            <div id="statusMessage" class="status-message"></div>
-        </header>
-            <!-- API Key 设置（仅保存在本地浏览器） -->
-            <div style="display:flex; align-items:center; gap:8px;">
-                <label for="apiKeyInput" style="font-size:0.9rem; color:#ecf0f1;">API Key:</label>
-                <input id="apiKeyInput" type="password" placeholder="输入后端要求的API密钥"
-                       style="width:260px; padding:6px 8px; border-radius:4px; border:1px solid #7f8c8d;" />
-                <button id="saveApiKeyBtn" class="toggle-btn" style="background:#16a085; color:white; padding:6px 10px; border-radius:4px;">保存</button>
-                <button id="toggleApiKeyVisibleBtn" class="toggle-btn" title="显示/隐藏" style="padding:6px 8px;">👁</button>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div id="statusMessage" class="status-message"></div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <label for="apiKeyInput" style="font-size:0.9rem; color:#ecf0f1;">API Key:</label>
+                    <input id="apiKeyInput" type="password" placeholder="输入后端要求的API密钥"
+                           style="width:220px; padding:6px 8px; border-radius:4px; border:1px solid #7f8c8d;" />
+                    <button id="saveApiKeyBtn" class="toggle-btn" style="background:#16a085; color:white; padding:6px 10px; border-radius:4px;">保存</button>
+                    <button id="toggleApiKeyVisibleBtn" class="toggle-btn" title="显示/隐藏" style="padding:6px 8px;">👁</button>
+                </div>
             </div>
-            <script>
-                (function(){
-                    const input = document.getElementById('apiKeyInput');
-                    const saveBtn = document.getElementById('saveApiKeyBtn');
-                    const toggleBtn = document.getElementById('toggleApiKeyVisibleBtn');
-                    // 初始化：如果已有 localStorage apiKey，用占位符表示已配置
-                    const existing = localStorage.getItem('apiKey');
-                    if (existing) {
-                        input.value = existing;
-                    }
-                    saveBtn.addEventListener('click', function(){
-                        const v = input.value.trim();
-                        if (!v) { alert('API Key 不能为空'); return; }
-                        localStorage.setItem('apiKey', v);
-                        alert('API Key 已保存到本地浏览器');
-                    });
-                    toggleBtn.addEventListener('click', function(){
-                        input.type = input.type === 'password' ? 'text' : 'password';
-                    });
-                })();
-            </script>
-
-
+        </header>
+        <script>
+            (function(){
+                const input = document.getElementById('apiKeyInput');
+                const saveBtn = document.getElementById('saveApiKeyBtn');
+                const toggleBtn = document.getElementById('toggleApiKeyVisibleBtn');
+                const existing = localStorage.getItem('apiKey');
+                if (existing) input.value = existing;
+                saveBtn.addEventListener('click', function(){
+                    const v = input.value.trim();
+                    if (!v) { alert('API Key 不能为空'); return; }
+                    localStorage.setItem('apiKey', v);
+                    alert('API Key 已保存到本地浏览器');
+                });
+                toggleBtn.addEventListener('click', function(){
+                    input.type = input.type === 'password' ? 'text' : 'password';
+                });
+            })();
+        </script>
         <!-- 侧边栏 -->
         <aside class="sidebar">
             <!-- 设置区域 -->
