@@ -5,6 +5,9 @@
       "runtime": "@vercel/node@3.0.0"
     }
   },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/server" }
+  ],
   "cleanUrls": true,
   "trailingSlash": false
 }
