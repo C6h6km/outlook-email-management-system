@@ -931,7 +931,7 @@
             });
         }
 
-        window.onload = function() {
+        window.onload = async function() {
             // 为文件输入添加事件监听器
             document.getElementById('fileInput').addEventListener('change', handleFileInput);
 
@@ -944,10 +944,10 @@
             // 初始化占位符
             updatePlaceholder();
 
-            // 尝试从localStorage加载已保存的邮箱信息
-            loadMailboxesFromStorage();
+            // 尝试从localStorage和Supabase加载已保存的邮箱信息
+            await loadMailboxesFromStorage();
 
-            // 确保即使没有从localStorage加载邮箱，也会显示空状态
+            // 确保即使没有加载邮箱，也会显示空状态
             updateMailboxList();
 
             // 尝试从localStorage加载已保存的API密码和地址
@@ -1109,25 +1109,148 @@
             }
         }
 
-        // 从localStorage加载邮箱信息
-        function loadMailboxesFromStorage() {
+        // 从localStorage和Supabase加载邮箱信息
+        async function loadMailboxesFromStorage() {
+            // 首先从本地存储加载
             const savedMailboxes = localStorage.getItem('mailboxes');
+            let localMailboxes = [];
             if (savedMailboxes) {
                 try {
-                    mailboxes = JSON.parse(savedMailboxes);
-                    updateMailboxList();
-                    setStatusMessage('已从本地存储加载邮箱信息', 'success');
+                    localMailboxes = JSON.parse(savedMailboxes);
                 } catch (error) {
-                    console.error('加载邮箱信息失败:', error);
-                    setStatusMessage('加载邮箱信息失败', 'error');
+                    console.error('加载本地邮箱信息失败:', error);
                 }
+            }
+
+            // 然后尝试从Supabase加载
+            try {
+                const supabaseMailboxes = await loadMailboxesFromSupabase();
+
+                // 合并本地和服务器数据，优先使用服务器数据
+                const emailMap = new Map();
+
+                // 先添加本地数据
+                localMailboxes.forEach(mailbox => {
+                    emailMap.set(mailbox.email, mailbox);
+                });
+
+                // 然后添加服务器数据，覆盖本地数据
+                supabaseMailboxes.forEach(mailbox => {
+                    emailMap.set(mailbox.email, mailbox);
+                });
+
+                mailboxes = Array.from(emailMap.values());
+
+                if (supabaseMailboxes.length > 0) {
+                    setStatusMessage(`已加载邮箱信息：本地${localMailboxes.length}个，服务器${supabaseMailboxes.length}个`, 'success');
+                } else if (localMailboxes.length > 0) {
+                    setStatusMessage('已从本地存储加载邮箱信息', 'success');
+                }
+
+                // 更新本地存储以保持同步
+                localStorage.setItem('mailboxes', JSON.stringify(mailboxes));
+
+            } catch (error) {
+                console.error('从Supabase加载失败:', error);
+                // 如果服务器加载失败，只使用本地数据
+                mailboxes = localMailboxes;
+                if (localMailboxes.length > 0) {
+                    setStatusMessage('已从本地存储加载邮箱信息（服务器连接失败）', 'success');
+                }
+            }
+
+            updateMailboxList();
+        }
+
+        // Supabase API配置 - 自动检测环境
+        const SUPABASE_API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:3001/api'
+            : '/api';
+
+        // 保存邮箱到Supabase服务器
+        async function saveMailboxesToSupabase(newMailboxes) {
+            try {
+                const response = await fetch(`${SUPABASE_API_BASE}/mailboxes/batch`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        mailboxes: newMailboxes
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || '保存到服务器失败');
+                }
+
+                return result;
+            } catch (error) {
+                console.error('保存到Supabase失败:', error);
+                throw error;
             }
         }
 
-        // 保存邮箱信息到localStorage
-        function saveMailboxesToStorage() {
+        // 从Supabase服务器加载邮箱
+        async function loadMailboxesFromSupabase() {
             try {
+                const response = await fetch(`${SUPABASE_API_BASE}/mailboxes`);
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || '从服务器加载失败');
+                }
+
+                return result.data || [];
+            } catch (error) {
+                console.error('从Supabase加载失败:', error);
+                return [];
+            }
+        }
+
+        // 删除Supabase中的邮箱
+        async function deleteMailboxFromSupabase(mailboxId) {
+            try {
+                const response = await fetch(`${SUPABASE_API_BASE}/mailboxes/${mailboxId}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || '从服务器删除失败');
+                }
+
+                return result;
+            } catch (error) {
+                console.error('从Supabase删除失败:', error);
+                throw error;
+            }
+        }
+
+        // 保存邮箱信息到localStorage和Supabase
+        async function saveMailboxesToStorage(newMailboxes = null) {
+            try {
+                // 保存到本地存储
                 localStorage.setItem('mailboxes', JSON.stringify(mailboxes));
+
+                // 如果有新邮箱，同时保存到Supabase
+                if (newMailboxes && newMailboxes.length > 0) {
+                    try {
+                        const result = await saveMailboxesToSupabase(newMailboxes);
+                        console.log('Supabase保存结果:', result);
+
+                        if (result.skipped > 0) {
+                            setStatusMessage(`本地和服务器保存成功！新增${result.added}个，跳过${result.skipped}个重复邮箱`, 'success');
+                        } else {
+                            setStatusMessage(`本地和服务器保存成功！新增${result.added}个邮箱`, 'success');
+                        }
+                    } catch (supabaseError) {
+                        setStatusMessage(`本地保存成功，但服务器保存失败: ${supabaseError.message}`, 'error');
+                    }
+                }
 
                 // 保存API设置
                 const apiPassword = document.getElementById('apiPassword').value;
@@ -1166,12 +1289,14 @@
         }
 
         // 解析邮箱输入
-        function parseMailboxInput() {
+        async function parseMailboxInput() {
             const input = document.getElementById('mailboxInput').value.trim();
             if (!input) {
                 setStatusMessage('请输入邮箱配置信息', 'error');
                 return;
             }
+
+            setStatusMessage('正在解析和保存邮箱...', 'loading');
 
             // 获取用户自定义的分隔符，如果为空则使用默认值
             let separator = document.getElementById('separatorInput').value;
@@ -1193,10 +1318,10 @@
                 }
 
                 newMailboxes.push({
-                    email: parts[0],
-                    password: parts[1],
-                    client_id: parts[2],
-                    refresh_token: parts[3]
+                    email: parts[0].trim(),
+                    password: parts[1].trim(),
+                    client_id: parts[2].trim(),
+                    refresh_token: parts[3].trim()
                 });
             }
 
@@ -1208,11 +1333,17 @@
             // 添加新的邮箱到列表
             mailboxes = [...mailboxes, ...newMailboxes];
             updateMailboxList();
-            saveMailboxesToStorage();
 
-            const message = `已添加 ${newMailboxes.length} 个邮箱` +
-                            (errorCount > 0 ? `，${errorCount} 个格式错误被忽略` : '');
-            setStatusMessage(message, 'success');
+            // 保存到本地和服务器
+            await saveMailboxesToStorage(newMailboxes);
+
+            // 如果没有在saveMailboxesToStorage中设置消息，则设置默认消息
+            const currentMessage = document.getElementById('statusMessage').textContent;
+            if (currentMessage.includes('正在解析和保存')) {
+                const message = `已添加 ${newMailboxes.length} 个邮箱` +
+                                (errorCount > 0 ? `，${errorCount} 个格式错误被忽略` : '');
+                setStatusMessage(message, 'success');
+            }
 
             // 清空输入框
             document.getElementById('mailboxInput').value = '';
@@ -2109,8 +2240,21 @@
         }
 
         // 删除单个邮箱
-        function deleteMailbox(index) {
-            if (confirm(`确定要删除邮箱 ${mailboxes[index].email} 吗？`)) {
+        async function deleteMailbox(index) {
+            const mailbox = mailboxes[index];
+            if (confirm(`确定要删除邮箱 ${mailbox.email} 吗？`)) {
+                // 如果邮箱有ID（来自Supabase），尝试从服务器删除
+                if (mailbox.id) {
+                    try {
+                        await deleteMailboxFromSupabase(mailbox.id);
+                        setStatusMessage('邮箱已从本地和服务器删除', 'success');
+                    } catch (error) {
+                        setStatusMessage(`邮箱已从本地删除，但服务器删除失败: ${error.message}`, 'error');
+                    }
+                } else {
+                    setStatusMessage('邮箱已从本地删除', 'success');
+                }
+
                 mailboxes.splice(index, 1);
 
                 // 如果删除的是当前选中的邮箱，重置选择
@@ -2124,8 +2268,7 @@
                 }
 
                 updateMailboxList();
-                saveMailboxesToStorage();
-                setStatusMessage('邮箱已删除', 'success');
+                await saveMailboxesToStorage(); // 更新本地存储
             }
         }
     </script>
