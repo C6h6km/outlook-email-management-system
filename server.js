@@ -96,30 +96,31 @@ app.post('/api/mailboxes', async (req, res) => {
             });
         }
 
-        // 检查邮箱是否已存在
+        // 检查邮箱是否已存在（含软删）
         const { data: existing } = await supabase
             .from('mailboxes')
-            .select('id')
+            .select('id, is_active')
             .eq('email', email)
-            .single();
+            .maybeSingle();
 
-        if (existing) {
-            return res.status(409).json({
-                success: false,
-                error: '邮箱已存在'
-            });
+        let data, error;
+        if (existing && existing.is_active === false) {
+            // 软删重激活并更新凭据
+            ({ data, error } = await supabase
+                .from('mailboxes')
+                .update({ is_active: true, password, client_id, refresh_token })
+                .eq('id', existing.id)
+                .select()
+                .single());
+        } else if (existing && existing.is_active === true) {
+            return res.status(409).json({ success: false, error: '邮箱已存在' });
+        } else {
+            ({ data, error } = await supabase
+                .from('mailboxes')
+                .insert([{ email, password, client_id, refresh_token }])
+                .select()
+                .single());
         }
-
-        const { data, error } = await supabase
-            .from('mailboxes')
-            .insert([{
-                email,
-                password,
-                client_id,
-                refresh_token
-            }])
-            .select()
-            .single();
 
         if (error) {
             throw error;
@@ -161,38 +162,64 @@ app.post('/api/mailboxes/batch', async (req, res) => {
             }
         }
 
-        // 检查重复邮箱
+        // 归一化邮箱列表
         const emails = mailboxes.map(m => m.email);
         const { data: existing } = await supabase
             .from('mailboxes')
-            .select('email')
+            .select('id, email, is_active')
             .in('email', emails);
 
-        const existingEmails = existing ? existing.map(e => e.email) : [];
-        const newMailboxes = mailboxes.filter(m => !existingEmails.includes(m.email));
-
-        if (newMailboxes.length === 0) {
-            return res.status(409).json({
-                success: false,
-                error: '所有邮箱都已存在'
-            });
+        const existingMap = new Map();
+        for (const row of existing || []) {
+            existingMap.set(row.email, row);
         }
 
-        const { data, error } = await supabase
-            .from('mailboxes')
-            .insert(newMailboxes)
-            .select();
+        const toInsert = [];
+        const reactivated = [];
+        const skipped = [];
 
-        if (error) {
-            throw error;
+        for (const m of mailboxes) {
+            const row = existingMap.get(m.email);
+            if (!row) {
+                toInsert.push({ email: m.email, password: m.password, client_id: m.client_id, refresh_token: m.refresh_token });
+            } else if (row.is_active === false) {
+                reactivated.push({ id: row.id, email: m.email, password: m.password, client_id: m.client_id, refresh_token: m.refresh_token });
+            } else {
+                skipped.push(m.email);
+            }
+        }
+
+        // 批量插入
+        let inserted = [];
+        if (toInsert.length > 0) {
+            const { data: ins, error: insErr } = await supabase
+                .from('mailboxes')
+                .insert(toInsert)
+                .select();
+            if (insErr) throw insErr;
+            inserted = ins || [];
+        }
+
+        // 批量重激活（逐条更新以返回记录）
+        const reactivatedResults = [];
+        for (const r of reactivated) {
+            const { data: upd, error: updErr } = await supabase
+                .from('mailboxes')
+                .update({ is_active: true, password: r.password, client_id: r.client_id, refresh_token: r.refresh_token })
+                .eq('id', r.id)
+                .select()
+                .single();
+            if (updErr) throw updErr;
+            if (upd) reactivatedResults.push(upd);
         }
 
         res.status(201).json({
             success: true,
-            data: data,
-            added: newMailboxes.length,
-            skipped: existingEmails.length,
-            skippedEmails: existingEmails
+            data: [...inserted, ...reactivatedResults],
+            added: inserted.length,
+            reactivated: reactivatedResults.length,
+            skipped: skipped.length,
+            skippedEmails: skipped
         });
     } catch (error) {
         console.error('批量添加邮箱失败:', error);
