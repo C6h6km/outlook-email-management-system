@@ -48,25 +48,43 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false,
 }));
 
-// 更宽松的CORS配置以支持file://协议
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-
-    if (req.method === 'OPTIONS') {
-        res.sendStatus(200);
-    } else {
-        next();
-    }
-});
+// 安全的CORS配置（支持白名单与 file:// 无 Origin 的情况）
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
 
 app.use(cors({
-    origin: true,
+    origin: (origin, callback) => {
+        // 允许无 Origin（如 curl、本地 file://）或白名单内的来源
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error('Not allowed by CORS'));
+    },
     credentials: false,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key']
 }));
+
+// API Key 保护（除健康检查外）
+app.use('/api', (req, res, next) => {
+    if (req.path === '/health') return next();
+
+    const requireKey = process.env.REQUIRE_API_KEY !== 'false';
+    const provided = req.headers['x-api-key'] || req.query.api_key;
+
+    if (!requireKey) return next();
+
+    const expected = process.env.API_KEY;
+    if (!expected) {
+        console.warn('[SECURITY] API_KEY 未配置，临时放行（仅用于开发环境）。');
+        return next();
+    }
+    if (provided === expected) return next();
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+});
 app.use(express.json());
 app.use(express.static('public'));
 

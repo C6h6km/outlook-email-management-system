@@ -2215,9 +2215,15 @@
                                     client_id: client_id,
                                     refresh_token: refresh_token
                                 };
-                                mailboxes.push(mailboxObj);
-                                newMailboxes.push(mailboxObj);
-                                successCount++;
+                                // 去重：仅在当前内存中不存在该 email 时添加
+                                const exists = mailboxes.some(m => m.email.toLowerCase() === email.toLowerCase());
+                                if (!exists) {
+                                    mailboxes.push(mailboxObj);
+                                    newMailboxes.push(mailboxObj);
+                                    successCount++;
+                                } else {
+                                    console.warn('跳过重复邮箱:', email);
+                                }
                             } else {
                                 console.warn('邮箱数据格式不完整:', card);
                                 errorCount++;
