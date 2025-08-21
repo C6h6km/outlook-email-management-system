@@ -1242,6 +1242,21 @@
                         const result = await saveMailboxesToSupabase(newMailboxes);
                         console.log('Supabase保存结果:', result);
 
+                        // 方式B：回填服务器返回的新建邮箱的 id 到本地对象
+                        if (result && result.data && Array.isArray(result.data)) {
+                            const idMap = new Map(result.data.map(item => [item.email, item.id]));
+                            // 回填给本次新增的对象
+                            for (const mb of newMailboxes) {
+                                const id = idMap.get(mb.email);
+                                if (id) mb.id = id;
+                            }
+                            // 同步回填到 mailboxes 数组里的对应项
+                            for (const m of mailboxes) {
+                                const id = idMap.get(m.email);
+                                if (id && !m.id) m.id = id;
+                            }
+                        }
+
                         if (result.skipped > 0) {
                             setStatusMessage(`本地和服务器保存成功！新增${result.added}个，跳过${result.skipped}个重复邮箱`, 'success');
                         } else {
