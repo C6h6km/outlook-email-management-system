@@ -1,16 +1,10 @@
 {
   "version": 2,
   "functions": {
-    "server.js": {
+    "api/server.js": {
       "runtime": "@vercel/node@3.0.0"
     }
   },
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/server.js"
-    }
-  ],
   "cleanUrls": true,
   "trailingSlash": false
 }
