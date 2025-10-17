@@ -2,9 +2,13 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Easy Outlook</title>
     <link rel="stylesheet" href="./css/styles.css">
+    <link rel="stylesheet" href="./css/mobile.css">
 </head>
 <body>
     <div class="app-container">
@@ -15,6 +19,13 @@
                 <div id="statusMessage" class="status-message"></div>
             </div>
         </header>
+
+        <!-- 移动端导航栏 -->
+        <nav class="mobile-nav" id="mobileNav">
+            <button type="button" class="mobile-nav-btn active" data-target="sidebar" onclick="switchMobileView('sidebar')">设置</button>
+            <button type="button" class="mobile-nav-btn" data-target="email-sidebar" onclick="switchMobileView('email-sidebar')">邮件列表</button>
+            <button type="button" class="mobile-nav-btn" data-target="main-content" onclick="switchMobileView('main-content')">邮件内容</button>
+        </nav>
 
         <!-- 左侧边栏 -->
         <aside class="sidebar">

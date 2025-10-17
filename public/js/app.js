@@ -1101,10 +1101,106 @@ window.fetchEmail = async function() {
     }
 };
 
+// ==================== 移动端适配功能 ====================
+
+/**
+ * 切换移动端视图
+ */
+window.switchMobileView = function(target) {
+    // 更新导航按钮状态
+    const navButtons = document.querySelectorAll('.mobile-nav-btn');
+    navButtons.forEach(btn => {
+        if (btn.dataset.target === target) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+    
+    // 切换显示区域
+    const sidebar = document.querySelector('.sidebar');
+    const emailSidebar = document.querySelector('.email-sidebar');
+    const mainContent = document.querySelector('.main-content');
+    
+    // 移除所有active类
+    sidebar.classList.remove('active');
+    emailSidebar.classList.remove('active');
+    mainContent.classList.remove('active');
+    
+    // 添加active到目标区域
+    switch(target) {
+        case 'sidebar':
+            sidebar.classList.add('active');
+            break;
+        case 'email-sidebar':
+            emailSidebar.classList.add('active');
+            break;
+        case 'main-content':
+            mainContent.classList.add('active');
+            break;
+    }
+};
+
+/**
+ * 检测是否为移动设备
+ */
+function isMobileDevice() {
+    return window.innerWidth <= 768;
+}
+
+/**
+ * 初始化移动端视图
+ */
+function initMobileView() {
+    if (isMobileDevice()) {
+        // 默认显示设置页面
+        switchMobileView('sidebar');
+    } else {
+        // 桌面端显示所有区域
+        const sidebar = document.querySelector('.sidebar');
+        const emailSidebar = document.querySelector('.email-sidebar');
+        const mainContent = document.querySelector('.main-content');
+        
+        sidebar.classList.add('active');
+        emailSidebar.classList.add('active');
+        mainContent.classList.add('active');
+    }
+}
+
+/**
+ * 监听窗口大小变化
+ */
+window.addEventListener('resize', debounce(() => {
+    initMobileView();
+}, 300));
+
+/**
+ * 移动端优化：双击邮箱后自动切换到邮件列表
+ */
+const originalMailboxSelect = mailboxListManager ? mailboxListManager.onSelect : null;
+if (isMobileDevice() && mailboxListManager) {
+    mailboxListManager.onSelect = function(callback) {
+        const wrappedCallback = async function(...args) {
+            await callback(...args);
+            // 切换到邮件列表视图
+            if (isMobileDevice()) {
+                switchMobileView('email-sidebar');
+            }
+        };
+        if (originalMailboxSelect) {
+            originalMailboxSelect.call(mailboxListManager, wrappedCallback);
+        }
+    };
+}
+
 // 页面加载时初始化
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initApp);
+    document.addEventListener('DOMContentLoaded', () => {
+        initApp();
+        initMobileView();
+    });
 } else {
     initApp();
+    initMobileView();
 }
 

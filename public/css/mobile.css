@@ -1,0 +1,466 @@
+/**
+ * 移动端适配样式
+ * 响应式设计：支持手机、平板等移动设备
+ */
+
+/* ==================== 移动端通用优化 ==================== */
+
+/* 平板设备 (768px - 1024px) */
+@media screen and (max-width: 1024px) {
+    /* 调整网格布局 - 减少列数 */
+    .app-container {
+        grid-template-columns: 300px 300px 1fr;
+    }
+    
+    /* 减少内边距 */
+    .sidebar-section,
+    .email-sidebar .sidebar-section,
+    .main-toolbar,
+    .tabs {
+        padding: 8px;
+    }
+    
+    /* 调整字体大小 */
+    .header h1 {
+        font-size: 1.3rem;
+    }
+    
+    /* 按钮大小优化 */
+    button {
+        padding: 8px 12px;
+        font-size: 0.9rem;
+        min-height: 44px; /* iOS推荐最小触摸区域 */
+    }
+    
+    /* 表单控件优化 */
+    .form-control,
+    textarea,
+    select {
+        font-size: 16px; /* 防止iOS自动缩放 */
+        padding: 10px;
+    }
+}
+
+/* 小平板和大手机 (481px - 768px) */
+@media screen and (max-width: 768px) {
+    /* 改为两列布局：左侧栏 + 主内容 */
+    .app-container {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto 1fr;
+    }
+    
+    /* 头部调整 */
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 15px;
+        height: auto;
+    }
+    
+    .header h1 {
+        font-size: 1.1rem;
+        line-height: 1.3;
+    }
+    
+    /* 侧边栏转为标签页样式 */
+    .sidebar,
+    .email-sidebar {
+        grid-column: 1;
+        grid-row: 2;
+        height: auto;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        display: none; /* 默认隐藏，通过切换显示 */
+    }
+    
+    /* 显示活动的侧边栏 */
+    .sidebar.active,
+    .email-sidebar.active {
+        display: flex;
+    }
+    
+    /* 主内容区域 */
+    .main-content {
+        grid-column: 1;
+        grid-row: 3;
+        height: calc(100vh - 100px);
+    }
+    
+    /* 添加移动端导航按钮 */
+    .mobile-nav {
+        display: flex;
+        justify-content: space-around;
+        background: #f0f0f0;
+        border-bottom: 1px solid #ddd;
+        padding: 10px;
+        gap: 10px;
+    }
+    
+    .mobile-nav button {
+        flex: 1;
+        padding: 10px;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 0.9rem;
+    }
+    
+    .mobile-nav button.active {
+        background: #3498db;
+        color: white;
+        border-color: #2980b9;
+    }
+    
+    /* 邮箱列表项优化 */
+    .mailbox-item,
+    .email-item {
+        padding: 12px 15px;
+        margin-bottom: 8px;
+    }
+    
+    .mailbox-email,
+    .email-item-subject {
+        font-size: 1rem;
+    }
+    
+    /* 删除按钮加大 */
+    .delete-mailbox {
+        width: 36px;
+        height: 36px;
+        font-size: 18px;
+    }
+    
+    /* 控制按钮组垂直排列 */
+    .control-group {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .control-group button {
+        width: 100%;
+    }
+    
+    /* 输入框优化 */
+    textarea {
+        height: 100px;
+        font-size: 16px;
+    }
+    
+    /* 邮件内容区域 */
+    .email-container {
+        height: calc(100vh - 150px);
+    }
+    
+    .email-viewer {
+        height: calc(100vh - 220px);
+    }
+}
+
+/* 手机设备 (320px - 480px) */
+@media screen and (max-width: 480px) {
+    /* 更紧凑的布局 */
+    .app-container {
+        grid-template-rows: auto auto 1fr;
+    }
+    
+    /* 头部进一步简化 */
+    .header {
+        padding: 8px 10px;
+    }
+    
+    .header h1 {
+        font-size: 0.95rem;
+        word-break: break-all;
+    }
+    
+    /* 状态消息简化 */
+    .status-message {
+        font-size: 0.8rem;
+    }
+    
+    /* 侧边栏区域 */
+    .sidebar-section h2,
+    .email-sidebar .sidebar-section h2 {
+        font-size: 0.9rem;
+    }
+    
+    /* 按钮进一步优化 */
+    button {
+        font-size: 0.85rem;
+        padding: 10px 12px;
+        min-height: 48px; /* 加大触摸区域 */
+    }
+    
+    .small-btn {
+        font-size: 0.75rem;
+        padding: 8px 10px;
+        min-height: 40px;
+    }
+    
+    /* 表单元素 */
+    .form-control,
+    textarea,
+    select {
+        font-size: 16px; /* 防止缩放 */
+        padding: 12px;
+    }
+    
+    .small-input {
+        width: 80px;
+        font-size: 14px;
+        padding: 8px;
+    }
+    
+    /* 邮箱/邮件列表 */
+    .mailbox-list,
+    .email-list {
+        padding: 8px;
+    }
+    
+    .mailbox-item,
+    .email-item {
+        padding: 10px 12px;
+        margin-bottom: 6px;
+    }
+    
+    .email-item-from {
+        font-size: 0.75rem;
+    }
+    
+    .email-item-date {
+        font-size: 0.7rem;
+    }
+    
+    /* 邮件详情 */
+    .email-header {
+        padding: 8px;
+    }
+    
+    .email-subject {
+        font-size: 1rem;
+    }
+    
+    .email-meta {
+        font-size: 0.8rem;
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    /* 标签页 */
+    .tabs {
+        padding: 5px;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+    
+    .tab {
+        font-size: 0.85rem;
+        padding: 0 12px;
+        min-width: 80px;
+    }
+    
+    /* 空状态 */
+    .empty-state {
+        font-size: 0.9rem;
+        padding: 15px;
+    }
+    
+    /* 输入组标签 */
+    label {
+        font-size: 0.85rem;
+    }
+    
+    /* 区域内容 */
+    .section-content {
+        padding: 8px;
+        max-height: 250px;
+    }
+    
+    /* 文件上传 */
+    .file-input-label {
+        font-size: 0.85rem;
+        padding: 10px 12px;
+    }
+    
+    /* 提示文字 */
+    .drag-hint,
+    .api-hint {
+        font-size: 0.7rem;
+    }
+}
+
+/* 极小屏幕 (< 360px) */
+@media screen and (max-width: 360px) {
+    .header h1 {
+        font-size: 0.85rem;
+    }
+    
+    button {
+        font-size: 0.8rem;
+        padding: 8px 10px;
+    }
+    
+    .mailbox-item,
+    .email-item {
+        padding: 8px 10px;
+    }
+}
+
+/* ==================== 触摸优化 ==================== */
+
+/* 增大可触摸区域 */
+@media (hover: none) and (pointer: coarse) {
+    /* 触摸设备 */
+    button,
+    .mailbox-item,
+    .email-item,
+    .tab {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    /* 移除hover效果，使用active */
+    .mailbox-item:hover,
+    .email-item:hover {
+        background-color: white;
+    }
+    
+    .mailbox-item:active,
+    .email-item:active {
+        background-color: #f5f5f5;
+    }
+    
+    button:hover {
+        background-color: #3498db;
+    }
+    
+    button:active {
+        background-color: #2980b9;
+        transform: scale(0.98);
+    }
+}
+
+/* ==================== 横屏模式优化 ==================== */
+
+@media screen and (max-width: 768px) and (orientation: landscape) {
+    .app-container {
+        grid-template-columns: 350px 1fr;
+        grid-template-rows: auto 1fr;
+    }
+    
+    .sidebar {
+        grid-column: 1;
+        grid-row: 2;
+        display: flex;
+        height: calc(100vh - 60px);
+    }
+    
+    .main-content {
+        grid-column: 2;
+        grid-row: 2;
+        height: calc(100vh - 60px);
+    }
+    
+    .email-sidebar {
+        display: none; /* 横屏时隐藏邮件列表侧边栏 */
+    }
+}
+
+/* ==================== 滚动条优化 ==================== */
+
+@media screen and (max-width: 768px) {
+    /* 移动端滚动条更细 */
+    .mailbox-list::-webkit-scrollbar,
+    .email-list::-webkit-scrollbar,
+    .email-viewer::-webkit-scrollbar {
+        width: 4px;
+    }
+    
+    .mailbox-list::-webkit-scrollbar-thumb,
+    .email-list::-webkit-scrollbar-thumb,
+    .email-viewer::-webkit-scrollbar-thumb {
+        background-color: #bbb;
+        border-radius: 2px;
+    }
+}
+
+/* ==================== 移动端导航栏 ==================== */
+
+.mobile-nav {
+    display: none; /* 桌面端隐藏 */
+}
+
+@media screen and (max-width: 768px) {
+    .mobile-nav {
+        display: flex;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }
+}
+
+/* ==================== 打印样式 ==================== */
+
+@media print {
+    .sidebar,
+    .email-sidebar,
+    .header,
+    .tabs,
+    .main-toolbar,
+    .mobile-nav {
+        display: none;
+    }
+    
+    .main-content {
+        grid-column: 1 / -1;
+    }
+    
+    .email-viewer {
+        height: auto;
+        overflow: visible;
+    }
+}
+
+/* ==================== 辅助功能 ==================== */
+
+/* 高对比度模式 */
+@media (prefers-contrast: high) {
+    button {
+        border: 2px solid currentColor;
+    }
+    
+    .mailbox-item,
+    .email-item {
+        border: 2px solid #333;
+    }
+}
+
+/* 减少动画（动态效果敏感用户） */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ==================== 性能优化 ==================== */
+
+/* 移动端禁用不必要的效果 */
+@media screen and (max-width: 768px) {
+    * {
+        -webkit-tap-highlight-color: rgba(0,0,0,0.1);
+        -webkit-touch-callout: none;
+    }
+    
+    /* 滚动性能优化 */
+    .mailbox-list,
+    .email-list,
+    .email-viewer {
+        -webkit-overflow-scrolling: touch;
+        overflow-scrolling: touch;
+    }
+}
+
