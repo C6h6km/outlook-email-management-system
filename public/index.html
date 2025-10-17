@@ -404,7 +404,7 @@
         }
 
         .status-message {
-            color: #333;
+            color: #ecf0f1;
         }
 
         .status-message.error {
@@ -680,35 +680,11 @@
         <!-- 头部 -->
         <header class="header">
             <h1>Easy Outlook----批量令牌邮箱快捷管理</h1>
-            <div style="display:flex; align-items:center; gap:10px; display:none;">
+            <div style="display:flex; align-items:center; gap:10px;">
                 <div id="statusMessage" class="status-message"></div>
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <label for="apiKeyInput" style="font-size:0.9rem; color:#ecf0f1;">API Key:</label>
-                    <input id="apiKeyInput" type="password" placeholder="输入后端要求的API密钥"
-                           style="width:220px; padding:6px 8px; border-radius:4px; border:1px solid #7f8c8d;" />
-                    <button id="saveApiKeyBtn" class="toggle-btn" style="background:#16a085; color:white; padding:6px 10px; border-radius:4px;">保存</button>
-                    <button id="toggleApiKeyVisibleBtn" class="toggle-btn" title="显示/隐藏" style="padding:6px 8px;">👁</button>
-                </div>
             </div>
         </header>
-        <script>
-            (function(){
-                const input = document.getElementById('apiKeyInput');
-                const saveBtn = document.getElementById('saveApiKeyBtn');
-                const toggleBtn = document.getElementById('toggleApiKeyVisibleBtn');
-                const existing = localStorage.getItem('apiKey');
-                if (existing) input.value = existing;
-                saveBtn.addEventListener('click', function(){
-                    const v = input.value.trim();
-                    if (!v) { alert('API Key 不能为空'); return; }
-                    localStorage.setItem('apiKey', v);
-                    alert('API Key 已保存到本地浏览器');
-                });
-                toggleBtn.addEventListener('click', function(){
-                    input.type = input.type === 'password' ? 'text' : 'password';
-                });
-            })();
-        </script>
+        <!-- 已移除 API Key 设置脚本，仅保留状态提示 -->
         <!-- 侧边栏 -->
         <aside class="sidebar">
             <!-- 设置区域 -->
@@ -913,19 +889,18 @@
         // 采购仓库与商品映射（根据官方文档同步一号库/二号库）
         const LIBRARIES = {
             '1': { // 一号库 /api
-                base: 'https://www.888-mail.com/api',
+                base: 'https://outlook007.cc/api',
                 items: [
                     { id: '1', name: '短效hotmail带令牌' },
                     { id: '2', name: '短效outlook带令牌' },
+                    { id: '13', name: '日本短效outlook带令牌' },
                     { id: '14', name: '德国短效outlook带令牌' },
                     { id: '15', name: '意大利短效outlook带令牌' },
                 ],
             },
             '2': { // 二号库 /api1
-                base: 'https://www.888-mail.com/api1',
+                base: 'https://outlook007.cc/api1',
                 items: [
-                    { id: '12', name: '短效hotmail网页号' },
-                    { id: '13', name: '短效outlook网页号' },
                     { id: '3', name: '短效hotmail带令牌' },
                     { id: '4', name: '短效outlook带令牌' },
                 ],
@@ -988,7 +963,7 @@
                 apiBaseInput.value = savedApiBaseUrl;
             } else {
                 // 默认内置地址，用户仍可修改
-                apiBaseInput.value = 'https://api.jdonx.tech/api';
+                apiBaseInput.value = 'https://api.1181180.xyz/api';
             }
 
             // 尝试从localStorage加载设置区域的折叠状态
@@ -1135,61 +1110,26 @@
             }
         }
 
-        // 从localStorage和Supabase加载邮箱信息
+        // 从服务器加载邮箱信息（不再使用本地存储）
         async function loadMailboxesFromStorage() {
-            // 首先从本地存储加载
-            const savedMailboxes = localStorage.getItem('mailboxes');
-            let localMailboxes = [];
-            if (savedMailboxes) {
-                try {
-                    localMailboxes = JSON.parse(savedMailboxes);
-                } catch (error) {
-                    console.error('加载本地邮箱信息失败:', error);
-                }
-            }
-
-            // 然后尝试从Supabase加载
             try {
                 const supabaseMailboxes = await loadMailboxesFromSupabase();
-
-                // 合并本地和服务器数据，优先使用服务器数据
-                const emailMap = new Map();
-
-                // 先添加本地数据
-                localMailboxes.forEach(mailbox => {
-                    emailMap.set(mailbox.email, mailbox);
-                });
-
-                // 然后添加服务器数据，覆盖本地数据
-                supabaseMailboxes.forEach(mailbox => {
-                    emailMap.set(mailbox.email, mailbox);
-                });
-
-                mailboxes = Array.from(emailMap.values());
-
-                if (supabaseMailboxes.length > 0) {
-                    setStatusMessage(`已加载邮箱信息：本地${localMailboxes.length}个，服务器${supabaseMailboxes.length}个`, 'success');
-                } else if (localMailboxes.length > 0) {
-                    setStatusMessage('已从本地存储加载邮箱信息', 'success');
+                mailboxes = Array.isArray(supabaseMailboxes) ? supabaseMailboxes : [];
+                if (mailboxes.length > 0) {
+                    setStatusMessage(`已加载服务器邮箱 ${mailboxes.length} 个`, 'success');
+                } else {
+                    setStatusMessage('服务器没有可用邮箱', 'success');
                 }
-
-                // 更新本地存储以保持同步
-                localStorage.setItem('mailboxes', JSON.stringify(mailboxes));
-
             } catch (error) {
                 console.error('从Supabase加载失败:', error);
-                // 如果服务器加载失败，只使用本地数据
-                mailboxes = localMailboxes;
-                if (localMailboxes.length > 0) {
-                    setStatusMessage('已从本地存储加载邮箱信息（服务器连接失败）', 'success');
-                }
+                mailboxes = [];
+                setStatusMessage('从服务器加载失败，请稍后重试', 'error');
             }
-
             updateMailboxList();
         }
 
         // Supabase API配置 - 自动检测环境
-        const SUPABASE_API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        const SUPABASE_API_BASE = (window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
             ? 'http://localhost:3001/api'
             : '/api';
 
@@ -1260,8 +1200,7 @@
         // 保存邮箱信息到localStorage和Supabase
         async function saveMailboxesToStorage(newMailboxes = null) {
             try {
-                // 保存到本地存储
-                localStorage.setItem('mailboxes', JSON.stringify(mailboxes));
+                // 不再将邮箱信息保存到本地存储
 
                 // 如果有新邮箱，同时保存到Supabase
                 if (newMailboxes && newMailboxes.length > 0) {
@@ -2023,24 +1962,20 @@
 
             try {
                 const currentLib = document.getElementById('purchaseLibrary').value || '1';
-                const base = LIBRARIES[currentLib].base;
-                const apiUrl = `${base}/login.php`;
-                const params = new URLSearchParams({
-                    app_id: finalAppId,
-                    app_key: finalAppKey
-                });
+                
+                console.log('发送余额查询请求');
 
-                console.log('发送余额查询请求:', apiUrl, params.toString());
-
-                // 强制通过代理以避免CORS
-                const proxyUrl = 'https://cors-header-proxy.bdkm656.workers.dev/';
-                const response = await fetch(proxyUrl + apiUrl, {
+                // 使用自己的后端 API 代理，避免 CORS 问题
+                const response = await fetch(`${SUPABASE_API_BASE}/proxy/balance`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Requested-With': 'XMLHttpRequest'
+                        'Content-Type': 'application/json',
                     },
-                    body: params.toString()
+                    body: JSON.stringify({
+                        app_id: finalAppId,
+                        app_key: finalAppKey,
+                        library: currentLib
+                    })
                 });
 
                 if (!response.ok) {
@@ -2095,21 +2030,14 @@
 
             try {
                 const currentLib = document.getElementById('purchaseLibrary').value || '1';
-                const base = LIBRARIES[currentLib].base;
-                const apiUrl = `${base}/getStock.php`;
-                const params = new URLSearchParams({
-                    commodity_id: queryId
-                });
 
-                console.log('发送库存查询请求:', apiUrl, params.toString());
+                console.log('发送库存查询请求');
 
-                // 强制通过代理以避免CORS
-                const proxyUrl = 'https://cors-header-proxy.bdkm656.workers.dev/';
-                const response = await fetch(`${proxyUrl}${apiUrl}?${params.toString()}`, {
+                // 使用自己的后端 API 代理，避免 CORS 问题
+                const response = await fetch(`${SUPABASE_API_BASE}/proxy/stock?commodity_id=${queryId}&library=${currentLib}`, {
                     method: 'GET',
                     headers: {
                         'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
                     }
                 });
 
@@ -2186,26 +2114,22 @@
 
             try {
                 const currentLib = document.getElementById('purchaseLibrary').value || '1';
-                const base = LIBRARIES[currentLib].base;
-                const apiUrl = `${base}/getEmail.php`;
-                const params = new URLSearchParams({
-                    app_id: finalAppId,
-                    app_key: finalAppKey,
-                    commodity_id: commodityId,
-                    num: num.toString()
-                });
 
-                console.log('发送购买请求:', apiUrl, params.toString());
+                console.log('发送购买请求');
 
-                // 强制通过代理以避免CORS
-                const proxyUrl = 'https://cors-header-proxy.bdkm656.workers.dev/';
-                const response = await fetch(`${proxyUrl}${apiUrl}`, {
+                // 使用自己的后端 API 代理，避免 CORS 问题
+                const response = await fetch(`${SUPABASE_API_BASE}/proxy/purchase`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Requested-With': 'XMLHttpRequest'
+                        'Content-Type': 'application/json',
                     },
-                    body: params.toString()
+                    body: JSON.stringify({
+                        app_id: finalAppId,
+                        app_key: finalAppKey,
+                        commodity_id: commodityId,
+                        num: num,
+                        library: currentLib
+                    })
                 });
 
                 if (!response.ok) {

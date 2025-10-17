@@ -962,7 +962,7 @@
                 apiBaseInput.value = savedApiBaseUrl;
             } else {
                 // 默认内置地址，用户仍可修改
-                apiBaseInput.value = 'https://api.jdonx.tech/api';
+                apiBaseInput.value = 'https://api.1181180.xyz/api';
             }
 
             // 尝试从localStorage加载设置区域的折叠状态
@@ -1109,61 +1109,26 @@
             }
         }
 
-        // 从localStorage和Supabase加载邮箱信息
+        // 从服务器加载邮箱信息（不再使用本地存储）
         async function loadMailboxesFromStorage() {
-            // 首先从本地存储加载
-            const savedMailboxes = localStorage.getItem('mailboxes');
-            let localMailboxes = [];
-            if (savedMailboxes) {
-                try {
-                    localMailboxes = JSON.parse(savedMailboxes);
-                } catch (error) {
-                    console.error('加载本地邮箱信息失败:', error);
-                }
-            }
-
-            // 然后尝试从Supabase加载
             try {
                 const supabaseMailboxes = await loadMailboxesFromSupabase();
-
-                // 合并本地和服务器数据，优先使用服务器数据
-                const emailMap = new Map();
-
-                // 先添加本地数据
-                localMailboxes.forEach(mailbox => {
-                    emailMap.set(mailbox.email, mailbox);
-                });
-
-                // 然后添加服务器数据，覆盖本地数据
-                supabaseMailboxes.forEach(mailbox => {
-                    emailMap.set(mailbox.email, mailbox);
-                });
-
-                mailboxes = Array.from(emailMap.values());
-
-                if (supabaseMailboxes.length > 0) {
-                    setStatusMessage(`已加载邮箱信息：本地${localMailboxes.length}个，服务器${supabaseMailboxes.length}个`, 'success');
-                } else if (localMailboxes.length > 0) {
-                    setStatusMessage('已从本地存储加载邮箱信息', 'success');
+                mailboxes = Array.isArray(supabaseMailboxes) ? supabaseMailboxes : [];
+                if (mailboxes.length > 0) {
+                    setStatusMessage(`已加载服务器邮箱 ${mailboxes.length} 个`, 'success');
+                } else {
+                    setStatusMessage('服务器没有可用邮箱', 'success');
                 }
-
-                // 更新本地存储以保持同步
-                localStorage.setItem('mailboxes', JSON.stringify(mailboxes));
-
             } catch (error) {
                 console.error('从Supabase加载失败:', error);
-                // 如果服务器加载失败，只使用本地数据
-                mailboxes = localMailboxes;
-                if (localMailboxes.length > 0) {
-                    setStatusMessage('已从本地存储加载邮箱信息（服务器连接失败）', 'success');
-                }
+                mailboxes = [];
+                setStatusMessage('从服务器加载失败，请稍后重试', 'error');
             }
-
             updateMailboxList();
         }
 
         // Supabase API配置 - 自动检测环境
-        const SUPABASE_API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        const SUPABASE_API_BASE = (window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
             ? 'http://localhost:3001/api'
             : '/api';
 
@@ -1234,8 +1199,7 @@
         // 保存邮箱信息到localStorage和Supabase
         async function saveMailboxesToStorage(newMailboxes = null) {
             try {
-                // 保存到本地存储
-                localStorage.setItem('mailboxes', JSON.stringify(mailboxes));
+                // 不再将邮箱信息保存到本地存储
 
                 // 如果有新邮箱，同时保存到Supabase
                 if (newMailboxes && newMailboxes.length > 0) {

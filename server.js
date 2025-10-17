@@ -2,23 +2,46 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const dotenv = require('dotenv');
-const { createClient } = require('@supabase/supabase-js');
+const path = require('path');
+const fs = require('fs').promises;
+const { v4: uuidv4 } = require('uuid');
 
 
 // 加载环境变量
 dotenv.config();
 
-// 从环境变量读取 Supabase 配置（生产环境务必在 Vercel 配置）
-let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-let supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const MAILBOXES_FILE = process.env.MAILBOXES_FILE || path.join(DATA_DIR, 'mailboxes.json');
 
-if (!supabaseUrl || !supabaseKey) {
-    console.error('Supabase配置不完整：请设置 NEXT_PUBLIC_SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY');
-    process.exit(1);
+async function ensureDataFile() {
+    try {
+        await fs.access(DATA_DIR);
+    } catch {
+        await fs.mkdir(DATA_DIR, { recursive: true });
+    }
+
+    try {
+        await fs.access(MAILBOXES_FILE);
+    } catch {
+        await fs.writeFile(MAILBOXES_FILE, JSON.stringify([]));
+    }
 }
 
-// 初始化Supabase客户端
-const supabase = createClient(supabaseUrl, supabaseKey);
+async function readMailboxes() {
+    await ensureDataFile();
+    const content = await fs.readFile(MAILBOXES_FILE, 'utf8');
+    try {
+        const parsed = JSON.parse(content);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+async function writeMailboxes(mailboxes) {
+    await ensureDataFile();
+    await fs.writeFile(MAILBOXES_FILE, JSON.stringify(mailboxes, null, 2));
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -26,6 +49,21 @@ const PORT = process.env.PORT || 3001;
 // 中间件
 app.use(helmet({
     crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+            "default-src": ["'self'"],
+            // 允许页面中的内联脚本与事件处理（开发/本地场景需要）
+            "script-src": ["'self'", "'unsafe-inline'"],
+            "script-src-attr": ["'unsafe-inline'"],
+            // 样式仍允许内联
+            "style-src": ["'self'", "https:", "'unsafe-inline'"],
+            // 允许本地图片与 data URI
+            "img-src": ["'self'", "data:"],
+            // 允许从本机与任意地址发起网络请求（前端会访问外部API与代理）
+            "connect-src": ["'self'", "http://localhost:" + (process.env.PORT || 3001), "*"]
+        }
+    }
 }));
 
 // 安全的CORS配置（支持白名单与 file:// 无 Origin 的情况）
@@ -60,19 +98,12 @@ app.get('/api/health', (req, res) => {
 // 获取所有邮箱
 app.get('/api/mailboxes', async (req, res) => {
     try {
-        const { data, error } = await supabase
-            .from('mailboxes')
-            .select('*')
-            .eq('is_active', true)
-            .order('created_at', { ascending: false });
-
-        if (error) {
-            throw error;
-        }
+        const mailboxes = await readMailboxes();
+        const activeMailboxes = mailboxes.filter(m => m.is_active !== false);
 
         res.json({
             success: true,
-            data: data || []
+            data: activeMailboxes
         });
     } catch (error) {
         console.error('获取邮箱列表失败:', error);
@@ -96,39 +127,42 @@ app.post('/api/mailboxes', async (req, res) => {
             });
         }
 
-        // 检查邮箱是否已存在（含软删）
-        const { data: existing } = await supabase
-            .from('mailboxes')
-            .select('id, is_active')
-            .eq('email', email)
-            .maybeSingle();
+        const mailboxes = await readMailboxes();
+        const existing = mailboxes.find(m => m.email === email);
 
-        let data, error;
-        if (existing && existing.is_active === false) {
-            // 软删重激活并更新凭据
-            ({ data, error } = await supabase
-                .from('mailboxes')
-                .update({ is_active: true, password, client_id, refresh_token })
-                .eq('id', existing.id)
-                .select()
-                .single());
-        } else if (existing && existing.is_active === true) {
+        if (existing && existing.is_active !== false) {
             return res.status(409).json({ success: false, error: '邮箱已存在' });
-        } else {
-            ({ data, error } = await supabase
-                .from('mailboxes')
-                .insert([{ email, password, client_id, refresh_token }])
-                .select()
-                .single());
         }
 
-        if (error) {
-            throw error;
+        const now = new Date().toISOString();
+        let mailbox;
+
+        if (existing && existing.is_active === false) {
+            existing.password = password;
+            existing.client_id = client_id;
+            existing.refresh_token = refresh_token;
+            existing.is_active = true;
+            existing.updated_at = now;
+            mailbox = existing;
+        } else {
+            mailbox = {
+                id: uuidv4(),
+                email,
+                password,
+                client_id,
+                refresh_token,
+                is_active: true,
+                created_at: now,
+                updated_at: now
+            };
+            mailboxes.push(mailbox);
         }
+
+        await writeMailboxes(mailboxes);
 
         res.status(201).json({
             success: true,
-            data: data
+            data: mailbox
         });
     } catch (error) {
         console.error('添加邮箱失败:', error);
@@ -162,62 +196,50 @@ app.post('/api/mailboxes/batch', async (req, res) => {
             }
         }
 
-        // 归一化邮箱列表
-        const emails = mailboxes.map(m => m.email);
-        const { data: existing } = await supabase
-            .from('mailboxes')
-            .select('id, email, is_active')
-            .in('email', emails);
+        const existingMailboxes = await readMailboxes();
+        const now = new Date().toISOString();
 
-        const existingMap = new Map();
-        for (const row of existing || []) {
-            existingMap.set(row.email, row);
-        }
+        const emailMap = new Map(existingMailboxes.map(m => [m.email, m]));
 
-        const toInsert = [];
+        const added = [];
         const reactivated = [];
         const skipped = [];
 
-        for (const m of mailboxes) {
-            const row = existingMap.get(m.email);
-            if (!row) {
-                toInsert.push({ email: m.email, password: m.password, client_id: m.client_id, refresh_token: m.refresh_token });
-            } else if (row.is_active === false) {
-                reactivated.push({ id: row.id, email: m.email, password: m.password, client_id: m.client_id, refresh_token: m.refresh_token });
+        for (const mailbox of mailboxes) {
+            const current = emailMap.get(mailbox.email);
+            if (!current) {
+                const newMailbox = {
+                    id: uuidv4(),
+                    email: mailbox.email,
+                    password: mailbox.password,
+                    client_id: mailbox.client_id,
+                    refresh_token: mailbox.refresh_token,
+                    is_active: true,
+                    created_at: now,
+                    updated_at: now
+                };
+                existingMailboxes.push(newMailbox);
+                emailMap.set(newMailbox.email, newMailbox);
+                added.push(newMailbox);
+            } else if (current.is_active === false) {
+                current.password = mailbox.password;
+                current.client_id = mailbox.client_id;
+                current.refresh_token = mailbox.refresh_token;
+                current.is_active = true;
+                current.updated_at = now;
+                reactivated.push(current);
             } else {
-                skipped.push(m.email);
+                skipped.push(mailbox.email);
             }
         }
 
-        // 批量插入
-        let inserted = [];
-        if (toInsert.length > 0) {
-            const { data: ins, error: insErr } = await supabase
-                .from('mailboxes')
-                .insert(toInsert)
-                .select();
-            if (insErr) throw insErr;
-            inserted = ins || [];
-        }
-
-        // 批量重激活（逐条更新以返回记录）
-        const reactivatedResults = [];
-        for (const r of reactivated) {
-            const { data: upd, error: updErr } = await supabase
-                .from('mailboxes')
-                .update({ is_active: true, password: r.password, client_id: r.client_id, refresh_token: r.refresh_token })
-                .eq('id', r.id)
-                .select()
-                .single();
-            if (updErr) throw updErr;
-            if (upd) reactivatedResults.push(upd);
-        }
+        await writeMailboxes(existingMailboxes);
 
         res.status(201).json({
             success: true,
-            data: [...inserted, ...reactivatedResults],
-            added: inserted.length,
-            reactivated: reactivatedResults.length,
+            data: [...added, ...reactivated],
+            added: added.length,
+            reactivated: reactivated.length,
             skipped: skipped.length,
             skippedEmails: skipped
         });
@@ -235,24 +257,20 @@ app.post('/api/mailboxes/batch', async (req, res) => {
 app.delete('/api/mailboxes/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        const mailboxes = await readMailboxes();
+        const mailbox = mailboxes.find(m => m.id === id);
 
-        const { data, error } = await supabase
-            .from('mailboxes')
-            .update({ is_active: false })
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) {
-            throw error;
-        }
-
-        if (!data) {
+        if (!mailbox) {
             return res.status(404).json({
                 success: false,
                 error: '邮箱不存在'
             });
         }
+
+        mailbox.is_active = false;
+        mailbox.updated_at = new Date().toISOString();
+
+        await writeMailboxes(mailboxes);
 
         res.json({
             success: true,
@@ -287,27 +305,23 @@ app.put('/api/mailboxes/:id', async (req, res) => {
             });
         }
 
-        const { data, error } = await supabase
-            .from('mailboxes')
-            .update(updateData)
-            .eq('id', id)
-            .select()
-            .single();
+        const mailboxes = await readMailboxes();
+        const mailbox = mailboxes.find(m => m.id === id);
 
-        if (error) {
-            throw error;
-        }
-
-        if (!data) {
+        if (!mailbox) {
             return res.status(404).json({
                 success: false,
                 error: '邮箱不存在'
             });
         }
 
+        Object.assign(mailbox, updateData, { updated_at: new Date().toISOString() });
+
+        await writeMailboxes(mailboxes);
+
         res.json({
             success: true,
-            data: data
+            data: mailbox
         });
     } catch (error) {
         console.error('更新邮箱失败:', error);
@@ -315,6 +329,144 @@ app.put('/api/mailboxes/:id', async (req, res) => {
             success: false,
             error: '更新邮箱失败',
             details: error.message
+        });
+    }
+});
+
+// ==================== 外部 API 代理路由 ====================
+// 采购 API 配置
+const PURCHASE_LIBRARIES = {
+    '1': 'https://outlook007.cc/api',
+    '2': 'https://outlook007.cc/api1'
+};
+
+// 代理：查询余额
+app.post('/api/proxy/balance', async (req, res) => {
+    try {
+        const { app_id, app_key, library = '1' } = req.body;
+        
+        if (!app_id || !app_key) {
+            return res.status(400).json({
+                success: false,
+                error: '缺少必要参数'
+            });
+        }
+
+        const baseUrl = PURCHASE_LIBRARIES[library];
+        if (!baseUrl) {
+            return res.status(400).json({
+                success: false,
+                error: '无效的库选择'
+            });
+        }
+
+        const fetch = (await import('node-fetch')).default;
+        const params = new URLSearchParams({
+            app_id,
+            app_key
+        });
+
+        const response = await fetch(`${baseUrl}/login.php`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: params.toString()
+        });
+
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error('查询余额失败:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// 代理：查询库存
+app.get('/api/proxy/stock', async (req, res) => {
+    try {
+        const { commodity_id, library = '1' } = req.query;
+        
+        if (!commodity_id) {
+            return res.status(400).json({
+                success: false,
+                error: '缺少商品ID'
+            });
+        }
+
+        const baseUrl = PURCHASE_LIBRARIES[library];
+        if (!baseUrl) {
+            return res.status(400).json({
+                success: false,
+                error: '无效的库选择'
+            });
+        }
+
+        const fetch = (await import('node-fetch')).default;
+        const response = await fetch(`${baseUrl}/getStock.php?commodity_id=${commodity_id}`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+            }
+        });
+
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error('查询库存失败:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// 代理：购买邮箱
+app.post('/api/proxy/purchase', async (req, res) => {
+    try {
+        const { app_id, app_key, commodity_id, num, library = '1' } = req.body;
+        
+        if (!app_id || !app_key || !commodity_id || !num) {
+            return res.status(400).json({
+                success: false,
+                error: '缺少必要参数'
+            });
+        }
+
+        const baseUrl = PURCHASE_LIBRARIES[library];
+        if (!baseUrl) {
+            return res.status(400).json({
+                success: false,
+                error: '无效的库选择'
+            });
+        }
+
+        const fetch = (await import('node-fetch')).default;
+        const params = new URLSearchParams({
+            app_id,
+            app_key,
+            commodity_id,
+            num: num.toString()
+        });
+
+        const response = await fetch(`${baseUrl}/getEmail.php`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: params.toString()
+        });
+
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error('购买邮箱失败:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
         });
     }
 });
