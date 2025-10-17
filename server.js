@@ -10,7 +10,10 @@ const { v4: uuidv4 } = require('uuid');
 // 加载环境变量
 dotenv.config();
 
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+// 在 Vercel（无服务器，磁盘只读）环境下使用 /tmp 作为可写目录
+const IS_VERCEL = !!process.env.VERCEL;
+const DEFAULT_DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR || (IS_VERCEL ? '/tmp/easy-outlook-data' : DEFAULT_DATA_DIR);
 const MAILBOXES_FILE = process.env.MAILBOXES_FILE || path.join(DATA_DIR, 'mailboxes.json');
 
 async function ensureDataFile() {
@@ -360,7 +363,6 @@ app.post('/api/proxy/balance', async (req, res) => {
             });
         }
 
-        const fetch = (await import('node-fetch')).default;
         const params = new URLSearchParams({
             app_id,
             app_key
@@ -405,7 +407,6 @@ app.get('/api/proxy/stock', async (req, res) => {
             });
         }
 
-        const fetch = (await import('node-fetch')).default;
         const response = await fetch(`${baseUrl}/getStock.php?commodity_id=${commodity_id}`, {
             method: 'GET',
             headers: {
@@ -444,7 +445,6 @@ app.post('/api/proxy/purchase', async (req, res) => {
             });
         }
 
-        const fetch = (await import('node-fetch')).default;
         const params = new URLSearchParams({
             app_id,
             app_key,
