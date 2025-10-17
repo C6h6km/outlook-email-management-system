@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Easy Outlook</title>
+    <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 头部 -->
+        <header class="header">
+            <h1>Easy Outlook----批量令牌邮箱快捷管理</h1>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div id="statusMessage" class="status-message"></div>
+            </div>
+        </header>
+
+        <!-- 左侧边栏 -->
+        <aside class="sidebar">
+            <!-- 设置区域 -->
+            <div class="sidebar-section" id="importSection">
+                <div class="section-header">
+                    <h2>设置</h2>
+                    <div style="display: flex; align-items: center;">
+                        <span id="sectionStatus" style="font-size: 0.8rem; margin-right: 5px; color: #666;">展开</span>
+                        <button id="toggleImportBtn" class="toggle-btn" onclick="toggleImportSection()">▼</button>
+                    </div>
+                </div>
+            </div>
+            <div id="importContent" class="section-content">
+                <div class="input-group">
+                    <div class="input-header">
+                        <label for="mailboxInput">手动输入邮箱配置</label>
+                        <div class="separator-input">
+                            <label for="separatorInput">分隔符:</label>
+                            <input type="text" id="separatorInput" value="----" class="small-input">
+                        </div>
+                    </div>
+                    <textarea id="mailboxInput" placeholder="格式: email----password----client_id----refresh_token" class="dropzone"></textarea>
+                    <div class="drag-hint">支持拖曳文件上传</div>
+                </div>
+                <div class="control-group" style="margin-bottom: 15px;">
+                    <div class="file-input-wrapper">
+                        <input type="file" id="fileInput" class="file-input" accept=".txt">
+                        <label for="fileInput" class="file-input-label">选择文件</label>
+                    </div>
+                    <button onclick="parseMailboxInput()">添加邮箱</button>
+                </div>
+                <div class="control-group" style="margin-bottom: 15px;">
+                    <button onclick="exportMailboxes()" class="secondary" title="导出所有邮箱到TXT文件">导出所有邮箱</button>
+                    <button onclick="exportSelectedMailbox()" class="secondary" title="复制选中邮箱的完整信息">复制选中邮箱</button>
+                </div>
+                <div class="input-group">
+                    <label for="apiBaseUrl">API地址（必填）</label>
+                    <input type="text" id="apiBaseUrl" placeholder="格式为https://xxxx/api" class="form-control">
+                    <div class="api-hint">说明：搭建API请参见 <a href="https://github.com/HChaoHui/msOauth2api" target="_blank">
+                        <svg class="github-icon" viewBox="0 0 16 16" width="14" height="14">
+                            <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+                        </svg> msOauth2api</a>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="apiPassword">API密码（可选）</label>
+                    <input type="password" id="apiPassword" placeholder="如果服务器要求密码验证，请输入" class="form-control">
+                </div>
+                <div class="control-group" style="margin-top: 15px;">
+                    <button onclick="saveApiSettings()" class="secondary">保存API设置</button>
+                </div>
+            </div>
+
+            <!-- 购买邮箱区域 -->
+            <div class="sidebar-section" id="purchaseSection">
+                <div class="section-header">
+                    <h2>购买邮箱</h2>
+                    <div style="display: flex; align-items: center;">
+                        <span id="purchaseSectionStatus" style="font-size: 0.8rem; margin-right: 5px; color: #666;">收起</span>
+                        <button id="togglePurchaseBtn" class="toggle-btn" onclick="togglePurchaseSection()">▶</button>
+                    </div>
+                </div>
+            </div>
+            <div id="purchaseContent" class="section-content collapsed">
+                <div class="input-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+                        <label>账户余额</label>
+                        <button onclick="checkBalance()" class="small-btn">查询余额</button>
+                    </div>
+                    <div id="balanceDisplay" style="margin-top: 3px; font-size: 0.8rem; color: #3498db; font-weight: bold;">
+                        点击"查询余额"获取账户信息
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="purchaseLibrary">选择仓库</label>
+                    <select id="purchaseLibrary" class="form-control" onchange="onPurchaseLibraryChange()">
+                        <option value="1">一号库</option>
+                        <option value="2">二号库</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+                        <label for="commodityId">商品</label>
+                        <button onclick="checkStock()" class="small-btn">查询库存</button>
+                    </div>
+                    <select id="commodityId" class="form-control"></select>
+                    <div id="stockDisplay" style="margin-top: 3px; font-size: 0.8rem; color: #3498db; font-weight: bold;">
+                        点击"查询库存"获取当前库存信息
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="purchaseNum">购买数量 (1-2000)</label>
+                    <input type="number" id="purchaseNum" min="1" max="2000" value="1" class="form-control">
+                </div>
+                <div class="control-group" style="margin-top: 15px;">
+                    <button onclick="purchaseEmails()" style="background-color: #27ae60;">购买邮箱</button>
+                </div>
+            </div>
+
+            <!-- 邮箱列表区域 -->
+            <div class="sidebar-section" id="mailboxSection">
+                <div class="section-header">
+                    <h2>邮箱列表</h2>
+                    <div style="display: flex; align-items: center;">
+                        <span id="mailboxSectionStatus" style="font-size: 0.8rem; margin-right: 5px; color: #666;">展开</span>
+                        <button id="toggleMailboxBtn" class="toggle-btn" onclick="toggleMailboxSection()">▼</button>
+                    </div>
+                </div>
+            </div>
+            <div id="mailboxContent" class="mailbox-list-content">
+                <ul id="mailboxList" class="mailbox-list"></ul>
+            </div>
+        </aside>
+
+        <!-- 邮件列表区域 -->
+        <aside class="email-sidebar">
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <h2>邮件列表</h2>
+                    <div class="control-group" style="margin-bottom: 0;">
+                        <select id="mailboxFolderList">
+                            <option value="INBOX" selected>收件箱</option>
+                            <option value="Junk">垃圾邮件</option>
+                        </select>
+                        <button onclick="loadEmailList()" class="small-btn">刷新</button>
+                    </div>
+                </div>
+            </div>
+            <ul id="emailList" class="email-list">
+                <div class="empty-state">
+                    <p>选择一个邮箱查看邮件</p>
+                </div>
+            </ul>
+        </aside>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <!-- 工具栏 -->
+            <div class="main-toolbar">
+                <div class="section-header">
+                    <div class="control-group" style="margin-bottom: 0;">
+                        <label for="responseType">格式:</label>
+                        <select id="responseType">
+                            <option value="json" selected>JSON</option>
+                            <option value="html">HTML</option>
+                        </select>
+                        <button onclick="fetchEmail()">获取最新邮件</button>
+                    </div>
+                    <div class="control-group" style="margin-bottom: 0;">
+                        <button class="secondary" onclick="clearEmailDisplay()">清除显示</button>
+                        <button class="warning" onclick="clearInbox()">清空收件箱</button>
+                        <button class="warning" onclick="clearJunk()">清空垃圾箱</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 标签页 -->
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('emailTab')">邮件内容</div>
+                <div class="tab" onclick="switchTab('rawTab')">JSON格式</div>
+            </div>
+
+            <!-- 邮件内容区域 -->
+            <div id="emailTab" class="email-container" style="display: block;">
+                <div id="emailHeader" class="email-header" style="display: none;">
+                    <div id="emailSubject" class="email-subject"></div>
+                    <div class="email-meta">
+                        <div id="emailFrom" class="email-from"></div>
+                        <div id="emailDate"></div>
+                    </div>
+                </div>
+
+                <div id="emailViewer" class="email-viewer">
+                    <div id="emptyState" class="empty-state">
+                        <p>选择一个邮箱并点击"获取邮件"来查看最新邮件</p>
+                    </div>
+                    <div id="loadingMessage" class="loading" style="display: none;">
+                        正在加载邮件内容...
+                    </div>
+                    <iframe id="emailFrame" style="display: none; flex: 1;"></iframe>
+                </div>
+            </div>
+
+            <!-- 原始数据区域 -->
+            <div id="rawTab" class="email-container" style="display: none;">
+                <pre id="rawData" class="raw-data"></pre>
+            </div>
+        </main>
+    </div>
+
+    <!-- 加载JavaScript模块 -->
+    <script type="module" src="./js/app.js"></script>
+</body>
+</html>
+
