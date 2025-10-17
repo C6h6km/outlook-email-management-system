@@ -2,7 +2,8 @@
  * 代理服务层 - 处理外部API请求
  */
 
-const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+// Node.js 18+ 内置fetch，无需导入
+// const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 const config = require('../config');
 
 class ProxyService {
