@@ -119,6 +119,7 @@ async function writeJSONBlob(key, data) {
     await put(key, payload, {
         access: 'public',
         contentType: 'application/json; charset=utf-8',
+        token: BLOB_TOKEN, // 显式传入 token
     });
 }
 
