@@ -111,7 +111,7 @@ async function readJSONBlob(key) {
  */
 async function writeJSONBlob(key, data) {
     assertBlobToken();
-    const { put, del } = await import('@vercel/blob');
+    const { put, del, list } = await import('@vercel/blob');
     const encryptionKey = getEncryptionKey();
     const payload = encryptionKey
         ? JSON.stringify(encryptJSON(data, encryptionKey))
@@ -119,11 +119,18 @@ async function writeJSONBlob(key, data) {
     
     // 先尝试删除已存在的 blob（如果存在）
     try {
-        const existingBlob = await readJSONBlob(key);
-        if (existingBlob !== null) {
-            // 构造完整的 URL 进行删除
-            const blobUrl = `${BLOB_BASE_URL}/${encodeURIComponent(key)}`;
-            await del(blobUrl, { token: BLOB_TOKEN });
+        // 使用 list API 查找匹配的 blob
+        const { blobs } = await list({
+            token: BLOB_TOKEN,
+            prefix: key,
+        });
+        
+        // 删除所有匹配的 blob（通常只有一个）
+        for (const blob of blobs) {
+            if (blob.pathname === key) {
+                await del(blob.url, { token: BLOB_TOKEN });
+                console.log(`已删除旧 blob: ${key}`);
+            }
         }
     } catch (err) {
         // 忽略删除错误（可能不存在）
