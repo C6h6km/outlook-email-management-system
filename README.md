@@ -63,15 +63,22 @@ npm run dev:old    # 旧版开发环境
 - **性能优化版**（推荐）：http://localhost:3001/index-optimized.html
 - **原始版本**（兼容）：http://localhost:3001/index.html
 
-### 配置环境变量（可选）
+### 配置环境变量
 
 ```bash
-# 复制环境变量示例文件
-cp .env.example .env
+# 启用 Blob 存储（用于持久化邮箱数据）
+BLOB_READ_WRITE_TOKEN=your_vercel_blob_rw_token
+# 可选：自定义对象键
+BLOB_MAILBOXES_KEY=mailboxes/mailboxes.json
+# 可选：自定义 Blob 基础域名
+BLOB_BASE_URL=https://blob.vercel-storage.com
 
-# 编辑配置
-# 设置端口、数据目录等
+# 服务器
+PORT=3001
+HOST=0.0.0.0
 ```
+
+说明：配置了 `BLOB_READ_WRITE_TOKEN` 后，后端会自动使用 Vercel Blob 存储；未配置时回退到本地 JSON 文件（Vercel 仅适合作为演示，会使用 /tmp）。
 
 ## 📁 项目结构
 

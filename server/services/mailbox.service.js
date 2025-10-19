@@ -6,27 +6,44 @@ const fs = require('fs').promises;
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
+const { readJSONBlob, writeJSONBlob } = require('../utils/blob-store');
 
 class MailboxService {
     constructor() {
         this.dataDir = config.dataDir;
         this.mailboxesFile = config.mailboxesFile;
+        // 在 Blob 中使用固定键存储
+        this.blobKey = process.env.BLOB_MAILBOXES_KEY || 'mailboxes/mailboxes.json';
+        this.useBlob = !!process.env.BLOB_READ_WRITE_TOKEN; // 有 Token 则启用 Blob
     }
     
     /**
      * 确保数据文件存在
      */
     async ensureDataFile() {
+        // 如果使用 Blob 存储，无需本地文件
+        if (this.useBlob) return;
+        
         try {
             await fs.access(this.dataDir);
         } catch {
-            await fs.mkdir(this.dataDir, { recursive: true });
+            // 在只读环境无法创建目录时，不抛出错误
+            try {
+                await fs.mkdir(this.dataDir, { recursive: true });
+            } catch (err) {
+                console.warn('无法创建数据目录，可能在只读环境:', err.message);
+                return; // 跳过，后续读取时会返回空数组
+            }
         }
         
         try {
             await fs.access(this.mailboxesFile);
         } catch {
-            await fs.writeFile(this.mailboxesFile, JSON.stringify([]));
+            try {
+                await fs.writeFile(this.mailboxesFile, JSON.stringify([]));
+            } catch (err) {
+                console.warn('无法创建数据文件，可能在只读环境:', err.message);
+            }
         }
     }
     
@@ -34,13 +51,20 @@ class MailboxService {
      * 读取邮箱列表
      */
     async readMailboxes() {
+        if (this.useBlob) {
+            const data = await readJSONBlob(this.blobKey);
+            return Array.isArray(data) ? data : [];
+        }
+        
         await this.ensureDataFile();
-        const content = await fs.readFile(this.mailboxesFile, 'utf8');
         
         try {
+            const content = await fs.readFile(this.mailboxesFile, 'utf8');
             const parsed = JSON.parse(content);
             return Array.isArray(parsed) ? parsed : [];
-        } catch {
+        } catch (err) {
+            // 文件不存在或解析失败时返回空数组
+            console.warn('读取邮箱文件失败，返回空数组:', err.message);
             return [];
         }
     }
@@ -49,8 +73,19 @@ class MailboxService {
      * 写入邮箱列表
      */
     async writeMailboxes(mailboxes) {
+        if (this.useBlob) {
+            await writeJSONBlob(this.blobKey, mailboxes);
+            return;
+        }
+        
         await this.ensureDataFile();
-        await fs.writeFile(this.mailboxesFile, JSON.stringify(mailboxes, null, 2));
+        
+        try {
+            await fs.writeFile(this.mailboxesFile, JSON.stringify(mailboxes, null, 2));
+        } catch (err) {
+            console.error('写入邮箱文件失败（可能在只读环境）:', err.message);
+            throw new Error('无法保存邮箱数据，请配置 BLOB_READ_WRITE_TOKEN 使用 Vercel Blob 存储');
+        }
     }
     
     /**
@@ -274,4 +309,6 @@ class MailboxService {
 const mailboxService = new MailboxService();
 
 module.exports = mailboxService;
+
+
 

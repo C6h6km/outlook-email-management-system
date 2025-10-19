@@ -30,3 +30,5 @@ router.get('/stats/summary', (req, res) => mailboxController.getStatistics(req, 
 
 module.exports = router;
 
+
+
