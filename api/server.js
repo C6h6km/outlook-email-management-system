@@ -1,4 +1,5 @@
-const app = require('../server');
+// 使用新架构的 Express 应用（含服务层，支持 Vercel Blob 持久化）
+const app = require('../server/app');
 
 // Export the Express app as the serverless function handler
 module.exports = app;
