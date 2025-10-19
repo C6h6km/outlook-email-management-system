@@ -30,19 +30,47 @@ app.use(helmet({
     }
 }));
 
-// CORS配置
+// CORS配置（支持通配符 *.vercel.app / '*'）
+function isOriginAllowed(origin) {
+    if (!origin) return true; // 无 Origin 的请求（curl/file://）放行
+    const list = config.corsOrigins || [];
+    if (list.length === 0) return true; // 未配置即放行
+    if (list.includes('*')) return true; // 显式允许所有
+    try {
+        const url = new URL(origin);
+        const host = url.hostname;
+        for (const pat of list) {
+            if (!pat) continue;
+            if (pat === '*') return true;
+            if (pat.startsWith('*.')) {
+                const suffix = pat.slice(1); // 如 '.vercel.app'
+                if (host.endsWith(suffix)) return true;
+            }
+            // 精确匹配（去除末尾斜杠）
+            const normOrigin = origin.replace(/\/$/, '');
+            const normPat = pat.replace(/\/$/, '');
+            if (normOrigin === normPat) return true;
+            // 常见场景：允许 vercel.app 子域
+            if (pat === 'vercel.app' && host.endsWith('.vercel.app')) return true;
+        }
+    } catch (_) {
+        // 解析失败时采用保守策略：不放行
+    }
+    // 始终允许本地调试
+    if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) return true;
+    return false;
+}
+
 app.use(cors({
     origin: (origin, callback) => {
-        // 允许无Origin（如curl、本地file://）或白名单内的来源
-        if (!origin) return callback(null, true);
-        if (config.corsOrigins.length === 0 || config.corsOrigins.includes(origin)) {
-            return callback(null, true);
-        }
-        return callback(new Error('Not allowed by CORS'));
+        const allowed = isOriginAllowed(origin);
+        // 不再抛出错误导致500，直接返回不允许（浏览器拦截CORS）
+        return callback(null, allowed);
     },
     credentials: false,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204,
 }));
 
 // 解析JSON请求体

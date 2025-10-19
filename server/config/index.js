@@ -22,7 +22,7 @@ const config = {
     dataDir: process.env.DATA_DIR || path.join(__dirname, '../../data'),
     mailboxesFile: process.env.MAILBOXES_FILE || path.join(process.env.DATA_DIR || path.join(__dirname, '../../data'), 'mailboxes.json'),
     
-    // CORS配置
+    // CORS配置（支持通配符）示例："*,https://yourdomain.com,*.vercel.app"
     corsOrigins: (process.env.ALLOWED_ORIGINS || '')
         .split(',')
         .map(s => s.trim())
@@ -45,4 +45,6 @@ const config = {
 };
 
 module.exports = config;
+
+
 
