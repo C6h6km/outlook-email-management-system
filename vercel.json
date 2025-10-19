@@ -1,7 +1,8 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/server" }
+    { "source": "/api/(.*)", "destination": "/api/server" },
+    { "source": "/new", "destination": "/index-optimized.html" }
   ],
   "cleanUrls": true,
   "trailingSlash": false

@@ -14,8 +14,8 @@ class MailboxService {
         this.mailboxesFile = config.mailboxesFile;
         // 在 Blob 中使用固定键存储
         this.blobKey = process.env.BLOB_MAILBOXES_KEY || 'mailboxes/mailboxes.json';
-        // 使用固定环境变量名
-        const blobToken = process.env.outlook_READ_WRITE_TOKEN;
+        // 优先使用 Vercel 自动注入的环境变量，兼容自定义变量名
+        const blobToken = process.env.BLOB_READ_WRITE_TOKEN || process.env.outlook_READ_WRITE_TOKEN;
         this.useBlob = !!blobToken; // 有 Token 则启用 Blob
     }
     

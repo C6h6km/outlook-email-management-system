@@ -716,6 +716,10 @@
                     </div>
                     <button onclick="parseMailboxInput()">添加邮箱</button>
                 </div>
+                <div class="control-group" style="margin-bottom: 15px;">
+                    <button onclick="exportMailboxes()" class="secondary" title="导出所有邮箱到TXT文件">导出所有邮箱</button>
+                    <button onclick="exportSelectedMailbox()" class="secondary" title="复制选中邮箱的完整信息">复制选中邮箱</button>
+                </div>
                 <div class="input-group">
                     <label for="apiBaseUrl">API地址（必填）</label>
                     <input type="text" id="apiBaseUrl" placeholder="格式为https://xxxx/api" class="form-control">
@@ -2245,6 +2249,79 @@
                 updateMailboxList();
                 await saveMailboxesToStorage(); // 更新本地存储
             }
+        }
+
+        // 导出所有邮箱数据
+        function exportMailboxes() {
+            if (mailboxes.length === 0) {
+                setStatusMessage('没有可导出的邮箱数据', 'error');
+                return;
+            }
+            
+            const separator = document.getElementById('separatorInput').value || '----';
+            
+            // 生成导出内容
+            const exportContent = mailboxes.map(mailbox => {
+                return `${mailbox.email}${separator}${mailbox.password}${separator}${mailbox.client_id}${separator}${mailbox.refresh_token}`;
+            }).join('\n');
+            
+            // 创建Blob对象
+            const blob = new Blob([exportContent], { type: 'text/plain;charset=utf-8' });
+            
+            // 创建下载链接
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            
+            // 生成文件名（包含时间戳）
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            link.download = `mailboxes_export_${timestamp}.txt`;
+            
+            // 触发下载
+            document.body.appendChild(link);
+            link.click();
+            
+            // 清理
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            setStatusMessage(`成功导出 ${mailboxes.length} 个邮箱`, 'success');
+        }
+
+        // 导出选中的邮箱
+        function exportSelectedMailbox() {
+            if (selectedMailboxIndex === -1) {
+                setStatusMessage('请先选择一个邮箱', 'error');
+                return;
+            }
+            
+            const mailbox = mailboxes[selectedMailboxIndex];
+            const separator = document.getElementById('separatorInput').value || '----';
+            
+            // 生成导出内容
+            const exportContent = `${mailbox.email}${separator}${mailbox.password}${separator}${mailbox.client_id}${separator}${mailbox.refresh_token}`;
+            
+            // 复制到剪贴板
+            navigator.clipboard.writeText(exportContent).then(() => {
+                setStatusMessage(`已复制邮箱 ${mailbox.email} 的完整信息到剪贴板`, 'success');
+            }).catch(() => {
+                // 降级方案：创建临时文本框
+                const textarea = document.createElement('textarea');
+                textarea.value = exportContent;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                
+                try {
+                    document.execCommand('copy');
+                    setStatusMessage(`已复制邮箱 ${mailbox.email} 的完整信息到剪贴板`, 'success');
+                } catch (err) {
+                    setStatusMessage('复制失败，请手动复制', 'error');
+                }
+                
+                document.body.removeChild(textarea);
+            });
         }
     </script>
 </body>
