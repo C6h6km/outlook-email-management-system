@@ -7,11 +7,17 @@
  */
 
 const BLOB_BASE_URL = process.env.BLOB_BASE_URL || 'https://blob.vercel-storage.com';
-const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN || '';
+// 兼容多种变量名，优先使用官方 BLOB_READ_WRITE_TOKEN
+const BLOB_TOKEN =
+    process.env.BLOB_READ_WRITE_TOKEN ||
+    process.env.outlook_READ_WRITE_TOKEN ||
+    process.env.OUTLOOK_READ_WRITE_TOKEN ||
+    process.env.BLOB_TOKEN ||
+    '';
 
 function assertBlobToken() {
     if (!BLOB_TOKEN) {
-        throw new Error('缺少环境变量 BLOB_READ_WRITE_TOKEN，无法使用 Vercel Blob');
+        throw new Error('缺少 Blob Token（请设置 BLOB_READ_WRITE_TOKEN 或 outlook_READ_WRITE_TOKEN）');
     }
 }
 

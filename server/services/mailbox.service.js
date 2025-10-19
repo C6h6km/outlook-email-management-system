@@ -14,7 +14,9 @@ class MailboxService {
         this.mailboxesFile = config.mailboxesFile;
         // 在 Blob 中使用固定键存储
         this.blobKey = process.env.BLOB_MAILBOXES_KEY || 'mailboxes/mailboxes.json';
-        this.useBlob = !!process.env.BLOB_READ_WRITE_TOKEN; // 有 Token 则启用 Blob
+        // 兼容多种环境变量名（outlook_READ_WRITE_TOKEN、OUTLOOK_READ_WRITE_TOKEN等）
+        const blobToken = process.env.BLOB_READ_WRITE_TOKEN || process.env.outlook_READ_WRITE_TOKEN || process.env.OUTLOOK_READ_WRITE_TOKEN || process.env.BLOB_TOKEN;
+        this.useBlob = !!blobToken; // 有 Token 则启用 Blob
     }
     
     /**
