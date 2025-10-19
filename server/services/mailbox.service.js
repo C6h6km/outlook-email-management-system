@@ -14,8 +14,8 @@ class MailboxService {
         this.mailboxesFile = config.mailboxesFile;
         // 在 Blob 中使用固定键存储
         this.blobKey = process.env.BLOB_MAILBOXES_KEY || 'mailboxes/mailboxes.json';
-        // 兼容多种环境变量名（outlook_READ_WRITE_TOKEN、OUTLOOK_READ_WRITE_TOKEN等）
-        const blobToken = process.env.BLOB_READ_WRITE_TOKEN || process.env.outlook_READ_WRITE_TOKEN || process.env.OUTLOOK_READ_WRITE_TOKEN || process.env.BLOB_TOKEN;
+        // 使用固定环境变量名
+        const blobToken = process.env.outlook_READ_WRITE_TOKEN;
         this.useBlob = !!blobToken; // 有 Token 则启用 Blob
     }
     
@@ -86,7 +86,7 @@ class MailboxService {
             await fs.writeFile(this.mailboxesFile, JSON.stringify(mailboxes, null, 2));
         } catch (err) {
             console.error('写入邮箱文件失败（可能在只读环境）:', err.message);
-            throw new Error('无法保存邮箱数据，请配置 BLOB_READ_WRITE_TOKEN 使用 Vercel Blob 存储');
+            throw new Error('无法保存邮箱数据，请配置 outlook_READ_WRITE_TOKEN 使用 Vercel Blob 存储');
         }
     }
     

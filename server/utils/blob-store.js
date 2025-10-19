@@ -2,23 +2,18 @@
  * Vercel Blob 存储工具
  * 在服务端读/写 JSON 文件到 Vercel Blob。
  * 说明：
- * - 需要在环境变量中配置 BLOB_READ_WRITE_TOKEN（Vercel Blob 的 RW Token）
+ * - 需要在环境变量中配置 outlook_READ_WRITE_TOKEN（Vercel Blob 的 RW Token）
  * - 可选：BLOB_BASE_URL（默认 https://blob.vercel-storage.com）
  */
 
 const BLOB_BASE_URL = process.env.BLOB_BASE_URL || 'https://blob.vercel-storage.com';
 const crypto = require('crypto');
-// 兼容多种变量名，优先使用官方 BLOB_READ_WRITE_TOKEN
-const BLOB_TOKEN =
-    process.env.BLOB_READ_WRITE_TOKEN ||
-    process.env.outlook_READ_WRITE_TOKEN ||
-    process.env.OUTLOOK_READ_WRITE_TOKEN ||
-    process.env.BLOB_TOKEN ||
-    '';
+// 使用指定环境变量名
+const BLOB_TOKEN = process.env.outlook_READ_WRITE_TOKEN || '';
 
 function assertBlobToken() {
     if (!BLOB_TOKEN) {
-        throw new Error('缺少 Blob Token（请设置 BLOB_READ_WRITE_TOKEN 或 outlook_READ_WRITE_TOKEN）');
+        throw new Error('缺少 Blob Token（请设置 outlook_READ_WRITE_TOKEN）');
     }
 }
 

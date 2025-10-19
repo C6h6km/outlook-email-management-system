@@ -67,7 +67,7 @@ npm run dev:old    # 旧版开发环境
 
 ```bash
 # 启用 Blob 存储（用于持久化邮箱数据）
-BLOB_READ_WRITE_TOKEN=your_vercel_blob_rw_token
+outlook_READ_WRITE_TOKEN=your_vercel_blob_rw_token
 # 可选：自定义对象键
 BLOB_MAILBOXES_KEY=mailboxes/mailboxes.json
 # 可选：自定义 Blob 基础域名
@@ -78,7 +78,7 @@ PORT=3001
 HOST=0.0.0.0
 ```
 
-说明：配置了 `BLOB_READ_WRITE_TOKEN` 后，后端会自动使用 Vercel Blob 存储；未配置时回退到本地 JSON 文件（Vercel 仅适合作为演示，会使用 /tmp）。
+说明：配置了 `outlook_READ_WRITE_TOKEN` 后，后端会自动使用 Vercel Blob 存储；未配置时回退到本地 JSON 文件（Vercel 仅适合作为演示，会使用 /tmp）。
 
 ## 📁 项目结构
 
