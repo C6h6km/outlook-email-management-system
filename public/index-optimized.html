@@ -6,7 +6,21 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Easy Outlook</title>
+    <meta name="theme-color" content="#3498db">
+    <meta name="description" content="Easy Outlook - 批量令牌邮箱快捷管理工具，支持移动端，提供邮件查看、管理等功能">
+    <title>Easy Outlook - 移动端优化版</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="./manifest.json">
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" sizes="152x152" href="./icons/icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192x192.png">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/icon-72x72.png">
+    
+    <!-- Stylesheets -->
     <link rel="stylesheet" href="./css/styles.css">
     <link rel="stylesheet" href="./css/mobile.css">
 </head>
@@ -31,15 +45,15 @@
         <aside class="sidebar">
             <!-- 设置区域 -->
             <div class="sidebar-section" id="importSection">
-                <div class="section-header">
+                <div class="section-header" onclick="toggleImportSection()">
                     <h2>设置</h2>
                     <div style="display: flex; align-items: center;">
-                        <span id="sectionStatus" style="font-size: 0.8rem; margin-right: 5px; color: #666;">展开</span>
-                        <button id="toggleImportBtn" class="toggle-btn" onclick="toggleImportSection()">▼</button>
+                        <span id="sectionStatus" style="font-size: 0.8rem; margin-right: 5px; color: #666;">收起</span>
+                        <button id="toggleImportBtn" class="toggle-btn" onclick="toggleImportSection(); event.stopPropagation()">▶</button>
                     </div>
                 </div>
             </div>
-            <div id="importContent" class="section-content">
+            <div id="importContent" class="section-content collapsed">
                 <div class="input-group">
                     <div class="input-header">
                         <label for="mailboxInput">手动输入邮箱配置</label>
@@ -62,31 +76,25 @@
                     <button onclick="exportMailboxes()" class="secondary" title="导出所有邮箱到TXT文件">导出所有邮箱</button>
                     <button onclick="exportSelectedMailbox()" class="secondary" title="复制选中邮箱的完整信息">复制选中邮箱</button>
                 </div>
-                <div class="input-group">
-                    <label for="apiBaseUrl">API地址（必填）</label>
-                    <input type="text" id="apiBaseUrl" placeholder="格式为https://xxxx/api" class="form-control">
-                    <div class="api-hint">说明：搭建API请参见 <a href="https://github.com/HChaoHui/msOauth2api" target="_blank">
-                        <svg class="github-icon" viewBox="0 0 16 16" width="14" height="14">
-                            <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
-                        </svg> msOauth2api</a>
-                    </div>
+                <div class="control-group" style="margin-bottom: 15px; gap: 8px; flex-wrap: wrap;">
+                    <button id="bulkDeleteToggle" class="warning" style="flex: 1 1 48%;" onclick="toggleBulkDeleteMode()">开启批量删除</button>
+                    <button class="secondary" style="flex: 1 1 48%;" onclick="validateAllMailboxes()">检测邮箱有效性</button>
                 </div>
-                <div class="input-group">
-                    <label for="apiPassword">API密码（可选）</label>
-                    <input type="password" id="apiPassword" placeholder="如果服务器要求密码验证，请输入" class="form-control">
+                <div class="control-group" id="bulkDeleteActions" style="display: none; gap: 8px; flex-wrap: wrap;">
+                    <button class="secondary small-btn" style="flex: 1 1 30%;" onclick="bulkToggleSelectAll()">全选 / 全不选</button>
+                    <button class="secondary small-btn" style="flex: 1 1 30%;" onclick="bulkClearSelection()">清空选择</button>
+                    <button class="warning small-btn" style="flex: 1 1 30%;" onclick="bulkDeleteMailboxes()">批量删除</button>
                 </div>
-                <div class="control-group" style="margin-top: 15px;">
-                    <button onclick="saveApiSettings()" class="secondary">保存API设置</button>
-                </div>
+                <!-- API 配置已移至后端环境变量，无需前端配置 -->
             </div>
 
             <!-- 购买邮箱区域 -->
             <div class="sidebar-section" id="purchaseSection">
-                <div class="section-header">
+                <div class="section-header" onclick="togglePurchaseSection()">
                     <h2>购买邮箱</h2>
                     <div style="display: flex; align-items: center;">
                         <span id="purchaseSectionStatus" style="font-size: 0.8rem; margin-right: 5px; color: #666;">收起</span>
-                        <button id="togglePurchaseBtn" class="toggle-btn" onclick="togglePurchaseSection()">▶</button>
+                        <button id="togglePurchaseBtn" class="toggle-btn" onclick="togglePurchaseSection(); event.stopPropagation()">▶</button>
                     </div>
                 </div>
             </div>
@@ -128,15 +136,15 @@
 
             <!-- 邮箱列表区域 -->
             <div class="sidebar-section" id="mailboxSection">
-                <div class="section-header">
+                <div class="section-header" onclick="toggleMailboxSection()">
                     <h2>邮箱列表</h2>
                     <div style="display: flex; align-items: center;">
                         <span id="mailboxSectionStatus" style="font-size: 0.8rem; margin-right: 5px; color: #666;">展开</span>
-                        <button id="toggleMailboxBtn" class="toggle-btn" onclick="toggleMailboxSection()">▼</button>
+                        <button id="toggleMailboxBtn" class="toggle-btn" onclick="toggleMailboxSection(); event.stopPropagation()">▼</button>
                     </div>
                 </div>
             </div>
-            <div id="mailboxContent" class="mailbox-list-content">
+            <div id="mailboxContent" class="mailbox-list-content">  <!-- 邮箱列表保持展开 -->
                 <ul id="mailboxList" class="mailbox-list"></ul>
             </div>
         </aside>
@@ -218,7 +226,162 @@
     </div>
 
     <!-- 加载JavaScript模块 -->
-    <script type="module" src="./js/app.js"></script>
+    <script type="module">
+        import { initApp } from './js/app.js';
+        import { initMobileEnhancements } from './js/mobile-enhance.js';
+        
+        // 初始化应用
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('📱 移动端优化版启动中...');
+            
+            // 初始化主应用
+            await initApp();
+            
+            // 初始化移动端增强功能
+            initMobileEnhancements();
+            
+            // 注册Service Worker (PWA支持)
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registration = await navigator.serviceWorker.register('./sw.js');
+                    console.log('✅ Service Worker 注册成功:', registration.scope);
+                    
+                    // 监听更新
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        console.log('🔄 发现新版本');
+                        
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                // 新版本已就绪，提示用户刷新
+                                if (confirm('发现新版本，是否立即更新？')) {
+                                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                    window.location.reload();
+                                }
+                            }
+                        });
+                    });
+                    
+                    // 监听控制器变化
+                    navigator.serviceWorker.addEventListener('controllerchange', () => {
+                        console.log('🔄 Service Worker 已更新');
+                    });
+                    
+                } catch (error) {
+                    console.error('❌ Service Worker 注册失败:', error);
+                }
+            }
+            
+            // PWA安装提示
+            let deferredPrompt;
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                console.log('💡 PWA可以安装');
+                
+                // 显示安装提示（可选）
+                showInstallPrompt();
+            });
+            
+            function showInstallPrompt() {
+                const installBanner = document.createElement('div');
+                installBanner.className = 'install-banner';
+                installBanner.innerHTML = `
+                    <div class="install-banner-content">
+                        <span>📱 安装应用到主屏幕，获得更好的体验</span>
+                        <div>
+                            <button onclick="this.parentElement.parentElement.parentElement.style.display='none'" class="btn-dismiss">稍后</button>
+                            <button onclick="installPWA()" class="btn-install">安装</button>
+                        </div>
+                    </div>
+                `;
+                installBanner.style.cssText = `
+                    position: fixed;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 15px;
+                    box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
+                    z-index: 9999;
+                    animation: slideUp 0.3s ease;
+                `;
+                
+                const style = document.createElement('style');
+                style.textContent = `
+                    @keyframes slideUp {
+                        from { transform: translateY(100%); }
+                        to { transform: translateY(0); }
+                    }
+                    .install-banner-content {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        gap: 10px;
+                        flex-wrap: wrap;
+                    }
+                    .install-banner-content > div {
+                        display: flex;
+                        gap: 10px;
+                    }
+                    .install-banner button {
+                        padding: 8px 16px;
+                        border: none;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        font-weight: bold;
+                        transition: transform 0.2s ease;
+                    }
+                    .install-banner button:active {
+                        transform: scale(0.95);
+                    }
+                    .btn-dismiss {
+                        background: rgba(255,255,255,0.3);
+                        color: white;
+                    }
+                    .btn-install {
+                        background: white;
+                        color: #667eea;
+                    }
+                `;
+                
+                document.head.appendChild(style);
+                document.body.appendChild(installBanner);
+                
+                // 全局安装函数
+                window.installPWA = async () => {
+                    if (!deferredPrompt) return;
+                    
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    console.log(`用户选择: ${outcome}`);
+                    
+                    if (outcome === 'accepted') {
+                        console.log('✅ PWA已安装');
+                    }
+                    
+                    deferredPrompt = null;
+                    installBanner.style.display = 'none';
+                };
+                
+                // 24小时后再次显示
+                setTimeout(() => {
+                    installBanner.style.display = 'none';
+                }, 24 * 60 * 60 * 1000);
+            }
+            
+            // 应用安装成功
+            window.addEventListener('appinstalled', () => {
+                console.log('🎉 PWA安装成功');
+                if (window.setStatusMessage) {
+                    window.setStatusMessage('应用已添加到主屏幕', 'success');
+                }
+            });
+            
+            console.log('✅ 移动端优化版启动完成');
+        });
+    </script>
 </body>
 </html>
-

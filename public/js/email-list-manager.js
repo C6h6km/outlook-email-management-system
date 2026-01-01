@@ -221,13 +221,16 @@ export class MailboxListManager {
         this.selectedIndex = -1;
         this.onSelectCallback = null;
         this.onDeleteCallback = null;
+        this.batchSelection = new Set();
+        this.bulkMode = false;
     }
     
     /**
      * 更新邮箱列表
      */
     updateMailboxes(mailboxes) {
-        this.mailboxes = mailboxes || [];
+        // 复制一份，避免与外部状态共享引用导致重复 splice
+        this.mailboxes = Array.isArray(mailboxes) ? [...mailboxes] : [];
         this.selectedIndex = -1;
         this.render();
     }
@@ -266,11 +269,21 @@ export class MailboxListManager {
      */
     createMailboxItem(mailbox, index) {
         const item = document.createElement('li');
-        item.className = 'mailbox-item' + (index === this.selectedIndex ? ' selected' : '');
+        const key = mailbox.id || mailbox.email;
+        const isBatchSelected = this.batchSelection.has(key);
+        item.className = 'mailbox-item' +
+            (index === this.selectedIndex ? ' selected' : '') +
+            (isBatchSelected ? ' selected' : '');
         
-        // 单击复制邮箱
+        // 单击行为：批量模式下切换选中；正常模式下复制
         item.onclick = async (e) => {
-            if (e.target.classList.contains('delete-mailbox')) return;
+            if (e.target.classList.contains('delete-mailbox') || e.target.classList.contains('mailbox-select')) return;
+
+            if (this.bulkMode) {
+                this.toggleBatchSelection(mailbox);
+                return;
+            }
+
             try {
                 await navigator.clipboard.writeText(mailbox.email);
                 window.setStatusMessage?.(`已复制: ${mailbox.email}`, 'success');
@@ -285,6 +298,20 @@ export class MailboxListManager {
             this.selectMailbox(index);
         };
         
+        // 选择复选框（仅批量模式显示）
+        if (this.bulkMode) {
+            const selectCheckbox = document.createElement('input');
+            selectCheckbox.type = 'checkbox';
+            selectCheckbox.className = 'mailbox-select';
+            selectCheckbox.checked = isBatchSelected;
+            selectCheckbox.title = '选择用于批量操作';
+            selectCheckbox.onclick = (e) => {
+                e.stopPropagation();
+                this.toggleBatchSelection(mailbox);
+            };
+            item.appendChild(selectCheckbox);
+        }
+
         // 邮箱地址
         const emailDiv = document.createElement('div');
         emailDiv.className = 'mailbox-email';
@@ -341,7 +368,14 @@ export class MailboxListManager {
      * 移除邮箱（内部方法，由外部调用后更新）
      */
     removeMailbox(index) {
+        const mailbox = this.mailboxes[index];
         this.mailboxes.splice(index, 1);
+
+        // 从批量选择中移除
+        if (mailbox) {
+            const key = mailbox.id || mailbox.email;
+            this.batchSelection.delete(key);
+        }
         
         // 调整选中索引
         if (index === this.selectedIndex) {
@@ -385,6 +419,65 @@ export class MailboxListManager {
     getMailboxes() {
         return this.mailboxes;
     }
+
+    /**
+     * 获取批量选择的邮箱
+     */
+    getBatchSelectedMailboxes() {
+        return this.mailboxes.filter(m => this.batchSelection.has(m.id || m.email));
+    }
+
+    /**
+     * 获取批量选择数量
+     */
+    getBatchSelectedCount() {
+        return this.batchSelection.size;
+    }
+
+    /**
+     * 设置批量模式
+     */
+    setBulkMode(enabled) {
+        this.bulkMode = !!enabled;
+        if (!this.bulkMode) {
+            this.clearBatchSelection();
+        } else {
+            this.render();
+        }
+    }
+
+    /**
+     * 全选或全不选
+     */
+    selectAllMailboxes() {
+        this.batchSelection.clear();
+        for (const mailbox of this.mailboxes) {
+            const key = mailbox.id || mailbox.email;
+            this.batchSelection.add(key);
+        }
+        this.render();
+    }
+
+    /**
+     * 切换批量选择
+     */
+    toggleBatchSelection(mailbox) {
+        const key = mailbox.id || mailbox.email;
+        if (this.batchSelection.has(key)) {
+            this.batchSelection.delete(key);
+        } else {
+            this.batchSelection.add(key);
+        }
+        this.render();
+    }
+
+    /**
+     * 清空批量选择
+     */
+    clearBatchSelection() {
+        this.batchSelection.clear();
+        this.render();
+    }
     
     /**
      * 设置选择回调
@@ -400,4 +493,3 @@ export class MailboxListManager {
         this.onDeleteCallback = callback;
     }
 }
-

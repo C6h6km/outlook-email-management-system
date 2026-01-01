@@ -17,6 +17,34 @@ class MailboxService {
         // 优先使用 Vercel 自动注入的环境变量，兼容自定义变量名
         const blobToken = process.env.BLOB_READ_WRITE_TOKEN || process.env.outlook_READ_WRITE_TOKEN;
         this.useBlob = !!blobToken; // 有 Token 则启用 Blob
+
+        // 并发控制：防止同时读写导致数据覆盖
+        this.writeLock = Promise.resolve();
+    }
+
+    /**
+     * 获取写锁，确保写操作串行执行
+     * @private
+     */
+    async _acquireWriteLock(operation) {
+        // 等待之前的写操作完成
+        const previousLock = this.writeLock;
+
+        // 创建新的锁（当前操作完成后释放）
+        let releaseLock;
+        this.writeLock = new Promise(resolve => {
+            releaseLock = resolve;
+        });
+
+        try {
+            // 等待之前的锁释放
+            await previousLock;
+            // 执行当前操作
+            return await operation();
+        } finally {
+            // 释放当前锁
+            releaseLock();
+        }
     }
     
     /**
@@ -118,162 +146,229 @@ class MailboxService {
      * 添加单个邮箱
      */
     async addMailbox(mailboxData) {
-        const { email, password, client_id, refresh_token } = mailboxData;
-        
-        // 验证必填字段
-        if (!email || !password || !client_id || !refresh_token) {
-            throw new Error('缺少必要的邮箱配置信息');
-        }
-        
-        const mailboxes = await this.readMailboxes();
-        const existing = mailboxes.find(m => m.email === email);
-        
-        if (existing && existing.is_active !== false) {
-            throw new Error('邮箱已存在');
-        }
-        
-        const now = new Date().toISOString();
-        let mailbox;
-        
-        if (existing && existing.is_active === false) {
-            // 重新激活已存在但被删除的邮箱
-            existing.password = password;
-            existing.client_id = client_id;
-            existing.refresh_token = refresh_token;
-            existing.is_active = true;
-            existing.updated_at = now;
-            mailbox = existing;
-        } else {
-            // 创建新邮箱
-            mailbox = {
-                id: uuidv4(),
-                email,
-                password,
-                client_id,
-                refresh_token,
-                is_active: true,
-                created_at: now,
-                updated_at: now,
-            };
-            mailboxes.push(mailbox);
-        }
-        
-        await this.writeMailboxes(mailboxes);
-        return mailbox;
+        return this._acquireWriteLock(async () => {
+            const { email, password, client_id, refresh_token } = mailboxData;
+            const source = mailboxData.source || 'manual';
+
+            // 验证必填字段
+            if (!email || !password || !client_id || !refresh_token) {
+                throw new Error('缺少必要的邮箱配置信息');
+            }
+
+            // 验证邮箱格式
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                throw new Error('邮箱格式无效');
+            }
+
+            // 验证字段长度
+            if (email.length > 255) {
+                throw new Error('邮箱地址过长（最大 255 字符）');
+            }
+            if (password.length > 1024) {
+                throw new Error('密码过长（最大 1024 字符）');
+            }
+            if (client_id.length > 255) {
+                throw new Error('客户端 ID 过长（最大 255 字符）');
+            }
+            if (refresh_token.length > 2048) {
+                throw new Error('刷新令牌过长（最大 2048 字符）');
+            }
+
+            const mailboxes = await this.readMailboxes();
+            const existing = mailboxes.find(m => m.email === email);
+
+            if (existing && existing.is_active !== false) {
+                throw new Error('邮箱已存在');
+            }
+
+            const now = new Date().toISOString();
+            let mailbox;
+
+            if (existing && existing.is_active === false) {
+                // 重新激活已存在但被删除的邮箱
+                existing.password = password;
+                existing.client_id = client_id;
+                existing.refresh_token = refresh_token;
+                existing.is_active = true;
+                existing.updated_at = now;
+                existing.source = existing.source || source;
+                mailbox = existing;
+            } else {
+                // 创建新邮箱
+                mailbox = {
+                    id: uuidv4(),
+                    email,
+                    password,
+                    client_id,
+                    refresh_token,
+                    is_active: true,
+                    source,
+                    created_at: now,
+                    updated_at: now,
+                };
+                mailboxes.push(mailbox);
+            }
+
+            await this.writeMailboxes(mailboxes);
+            return mailbox;
+        });
     }
     
     /**
      * 批量添加邮箱
      */
     async addMailboxesBatch(mailboxesData) {
-        if (!Array.isArray(mailboxesData) || mailboxesData.length === 0) {
-            throw new Error('邮箱数据格式错误');
-        }
-        
-        // 验证每个邮箱的数据完整性
-        for (const mailbox of mailboxesData) {
-            if (!mailbox.email || !mailbox.password || !mailbox.client_id || !mailbox.refresh_token) {
-                throw new Error('邮箱配置信息不完整');
+        return this._acquireWriteLock(async () => {
+            if (!Array.isArray(mailboxesData) || mailboxesData.length === 0) {
+                throw new Error('邮箱数据格式错误');
             }
-        }
-        
-        const existingMailboxes = await this.readMailboxes();
-        const now = new Date().toISOString();
-        
-        const emailMap = new Map(existingMailboxes.map(m => [m.email, m]));
-        
-        const added = [];
-        const reactivated = [];
-        const skipped = [];
-        
-        for (const mailboxData of mailboxesData) {
-            const current = emailMap.get(mailboxData.email);
-            
-            if (!current) {
-                // 新邮箱
-                const newMailbox = {
-                    id: uuidv4(),
-                    email: mailboxData.email,
-                    password: mailboxData.password,
-                    client_id: mailboxData.client_id,
-                    refresh_token: mailboxData.refresh_token,
-                    is_active: true,
-                    created_at: now,
-                    updated_at: now,
-                };
-                existingMailboxes.push(newMailbox);
-                emailMap.set(newMailbox.email, newMailbox);
-                added.push(newMailbox);
-            } else if (current.is_active === false) {
-                // 重新激活
-                current.password = mailboxData.password;
-                current.client_id = mailboxData.client_id;
-                current.refresh_token = mailboxData.refresh_token;
-                current.is_active = true;
-                current.updated_at = now;
-                reactivated.push(current);
-            } else {
-                // 跳过已存在的
-                skipped.push(mailboxData.email);
+
+            // 验证每个邮箱的数据完整性
+            for (const mailbox of mailboxesData) {
+                if (!mailbox.email || !mailbox.password || !mailbox.client_id || !mailbox.refresh_token) {
+                    throw new Error('邮箱配置信息不完整');
+                }
             }
-        }
-        
-        await this.writeMailboxes(existingMailboxes);
-        
-        return {
-            data: [...added, ...reactivated],
-            added: added.length,
-            reactivated: reactivated.length,
-            skipped: skipped.length,
-            skippedEmails: skipped,
-        };
+
+            const existingMailboxes = await this.readMailboxes();
+            const now = new Date().toISOString();
+
+            const emailMap = new Map(existingMailboxes.map(m => [m.email, m]));
+
+            const added = [];
+            const reactivated = [];
+            const skipped = [];
+
+            for (const mailboxData of mailboxesData) {
+                const current = emailMap.get(mailboxData.email);
+                const source = mailboxData.source || 'manual';
+
+                if (!current) {
+                    // 新邮箱
+                    const newMailbox = {
+                        id: uuidv4(),
+                        email: mailboxData.email,
+                        password: mailboxData.password,
+                        client_id: mailboxData.client_id,
+                        refresh_token: mailboxData.refresh_token,
+                        is_active: true,
+                        source,
+                        created_at: now,
+                        updated_at: now,
+                    };
+                    existingMailboxes.push(newMailbox);
+                    emailMap.set(newMailbox.email, newMailbox);
+                    added.push(newMailbox);
+                } else if (current.is_active === false) {
+                    // 重新激活
+                    current.password = mailboxData.password;
+                    current.client_id = mailboxData.client_id;
+                    current.refresh_token = mailboxData.refresh_token;
+                    current.is_active = true;
+                    current.updated_at = now;
+                    current.source = current.source || source;
+                    reactivated.push(current);
+                } else {
+                    // 跳过已存在的
+                    skipped.push(mailboxData.email);
+                }
+            }
+
+            await this.writeMailboxes(existingMailboxes);
+
+            return {
+                data: [...added, ...reactivated],
+                added: added.length,
+                reactivated: reactivated.length,
+                skipped: skipped.length,
+                skippedEmails: skipped,
+            };
+        });
     }
     
     /**
      * 更新邮箱
      */
     async updateMailbox(id, updateData) {
-        const { email, password, client_id, refresh_token } = updateData;
-        
-        const data = {};
-        if (email) data.email = email;
-        if (password) data.password = password;
-        if (client_id) data.client_id = client_id;
-        if (refresh_token) data.refresh_token = refresh_token;
-        
-        if (Object.keys(data).length === 0) {
-            throw new Error('没有提供要更新的数据');
-        }
-        
-        const mailboxes = await this.readMailboxes();
-        const mailbox = mailboxes.find(m => m.id === id);
-        
-        if (!mailbox) {
-            throw new Error('邮箱不存在');
-        }
-        
-        Object.assign(mailbox, data, { updated_at: new Date().toISOString() });
-        
-        await this.writeMailboxes(mailboxes);
-        return mailbox;
+        return this._acquireWriteLock(async () => {
+            const { email, password, client_id, refresh_token } = updateData;
+
+            const data = {};
+            if (email) data.email = email;
+            if (password) data.password = password;
+            if (client_id) data.client_id = client_id;
+            if (refresh_token) data.refresh_token = refresh_token;
+
+            if (Object.keys(data).length === 0) {
+                throw new Error('没有提供要更新的数据');
+            }
+
+            const mailboxes = await this.readMailboxes();
+            const mailbox = mailboxes.find(m => m.id === id);
+
+            if (!mailbox) {
+                throw new Error('邮箱不存在');
+            }
+
+            Object.assign(mailbox, data, { updated_at: new Date().toISOString() });
+
+            await this.writeMailboxes(mailboxes);
+            return mailbox;
+        });
     }
-    
+
     /**
      * 删除邮箱（软删除）
      */
     async deleteMailbox(id) {
-        const mailboxes = await this.readMailboxes();
-        const mailbox = mailboxes.find(m => m.id === id);
-        
-        if (!mailbox) {
-            throw new Error('邮箱不存在');
+        return this._acquireWriteLock(async () => {
+            const mailboxes = await this.readMailboxes();
+            const mailbox = mailboxes.find(m => m.id === id);
+
+            if (!mailbox) {
+                throw new Error('邮箱不存在');
+            }
+
+            mailbox.is_active = false;
+            mailbox.updated_at = new Date().toISOString();
+
+            await this.writeMailboxes(mailboxes);
+            return { message: '邮箱删除成功' };
+        });
+    }
+
+    /**
+     * 批量删除邮箱（软删除）
+     */
+    async deleteMailboxesBatch(ids = []) {
+        if (!Array.isArray(ids) || ids.length === 0) {
+            throw new Error('缺少要删除的邮箱ID列表');
         }
-        
-        mailbox.is_active = false;
-        mailbox.updated_at = new Date().toISOString();
-        
-        await this.writeMailboxes(mailboxes);
-        return { message: '邮箱删除成功' };
+
+        return this._acquireWriteLock(async () => {
+            const mailboxes = await this.readMailboxes();
+            let deleted = 0;
+
+            const now = new Date().toISOString();
+
+            for (const id of ids) {
+                const mailbox = mailboxes.find(m => m.id === id);
+                if (mailbox && mailbox.is_active !== false) {
+                    mailbox.is_active = false;
+                    mailbox.updated_at = now;
+                    deleted++;
+                }
+            }
+
+            await this.writeMailboxes(mailboxes);
+
+            return {
+                message: '批量删除完成',
+                deleted,
+                total: ids.length
+            };
+        });
     }
     
     /**
@@ -303,6 +398,52 @@ class MailboxService {
             total: mailboxes.length,
             active: mailboxes.filter(m => m.is_active !== false).length,
             inactive: mailboxes.filter(m => m.is_active === false).length,
+        };
+    }
+
+    /**
+     * 按来源校验邮箱，外部 API 返回 500 时视为失效并软删除
+     * @param {string[]} ids 可选，仅校验指定ID
+     * @param {string|null} source 指定来源（如 'purchase'）；为 null 时校验所有来源
+     */
+    async validateMailboxesBySource(ids = [], source = 'purchase') {
+        const mailboxes = await this.getAllMailboxes();
+        const target = mailboxes.filter(m => {
+            if (m.is_active === false) return false;
+            if (source && m.source !== source) return false;
+            if (ids.length > 0 && !ids.includes(m.id)) return false;
+            return true;
+        });
+
+        let checked = 0;
+        let removed = 0;
+        const removedEmails = [];
+        const errors = [];
+
+        for (const mailbox of target) {
+            try {
+                await require('./proxy.service').getMailboxEmails(mailbox, 'inbox');
+                checked++;
+            } catch (err) {
+                const status = err.status || (err.message && err.message.includes('HTTP 500') ? 500 : null);
+                if (status === 500) {
+                    await this.deleteMailbox(mailbox.id);
+                    removed++;
+                    removedEmails.push(mailbox.email);
+                } else {
+                    errors.push({ email: mailbox.email, error: err.message });
+                }
+            }
+        }
+
+        const remaining = await this.getAllMailboxes();
+
+        return {
+            checked,
+            removed,
+            removedEmails,
+            errors,
+            data: remaining,
         };
     }
 }

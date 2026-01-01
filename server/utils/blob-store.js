@@ -8,6 +8,8 @@
 
 const BLOB_BASE_URL = process.env.BLOB_BASE_URL || 'https://blob.vercel-storage.com';
 const crypto = require('crypto');
+const logger = require('./logger');
+
 // 优先使用 Vercel 自动注入的环境变量，兼容自定义变量名
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN || process.env.outlook_READ_WRITE_TOKEN || '';
 
@@ -65,7 +67,7 @@ function tryDecryptWrapper(parsed) {
             return JSON.parse(plaintext);
         }
     } catch (e) {
-        console.warn('Blob 解密失败:', e.message);
+        logger.warn('Blob 解密失败:', { error: e.message });
         return null;
     }
     return null;
@@ -78,7 +80,7 @@ function tryDecryptWrapper(parsed) {
  */
 async function readJSONBlob(key) {
     assertBlobToken();
-    
+
     try {
         // 使用 list API 查找 blob
         const { list } = await import('@vercel/blob');
@@ -86,14 +88,14 @@ async function readJSONBlob(key) {
             token: BLOB_TOKEN,
             prefix: key,
         });
-        
+
         // 查找精确匹配的 blob
         const blob = blobs.find(b => b.pathname === key);
         if (!blob) {
-            console.log(`[Blob] 读取失败 - 文件不存在: ${key}`);
+            logger.debug(`[Blob] 文件不存在: ${key}`);
             return null;
         }
-        
+
         // 使用 blob 的下载 URL 读取内容
         const resp = await fetch(blob.downloadUrl, {
             method: 'GET',
@@ -103,17 +105,19 @@ async function readJSONBlob(key) {
                 'Pragma': 'no-cache',
             },
         });
-        
+
         if (!resp.ok) {
             const text = await resp.text().catch(() => '');
-            console.error(`[Blob] 读取失败: ${key}, 状态: ${resp.status}`);
+            logger.error(`[Blob] 读取失败: ${key}`, { status: resp.status, statusText: resp.statusText });
             throw new Error(`读取 Blob 失败: ${resp.status} ${resp.statusText} ${text}`);
         }
-        
+
         const text = await resp.text();
         const parsed = JSON.parse(text);
-        console.log(`[Blob] ✅ 成功读取: ${key}, 数据项数: ${Array.isArray(parsed) ? parsed.length : 'N/A'}`);
-        
+
+        const itemCount = Array.isArray(parsed) ? parsed.length : 'N/A';
+        logger.logBlobOperation('读取', key, true, { itemCount });
+
         if (parsed && parsed.__enc) {
             const decrypted = tryDecryptWrapper(parsed);
             return decrypted ?? null;
@@ -123,7 +127,7 @@ async function readJSONBlob(key) {
         if (err.message.includes('不存在')) {
             return null;
         }
-        console.error(`[Blob] 读取或解析失败: ${key}`, err);
+        logger.error(`[Blob] 读取或解析失败: ${key}`, { error: err.message });
         return null;
     }
 }
@@ -140,9 +144,9 @@ async function writeJSONBlob(key, data) {
     const payload = encryptionKey
         ? JSON.stringify(encryptJSON(data, encryptionKey))
         : JSON.stringify(data, null, 2);
-    
-    console.log(`[Blob] 准备写入: ${key}, 数据长度: ${payload.length} 字节`);
-    
+
+    logger.debug(`[Blob] 准备写入: ${key}`, { size: payload.length });
+
     // 先尝试删除已存在的 blob（如果存在）
     try {
         // 使用 list API 查找匹配的 blob
@@ -150,19 +154,19 @@ async function writeJSONBlob(key, data) {
             token: BLOB_TOKEN,
             prefix: key,
         });
-        
+
         // 删除所有匹配的 blob（通常只有一个）
         for (const blob of blobs) {
             if (blob.pathname === key) {
                 await del(blob.url, { token: BLOB_TOKEN });
-                console.log(`[Blob] 已删除旧 blob: ${key}`);
+                logger.debug(`[Blob] 已删除旧版本: ${key}`);
             }
         }
     } catch (err) {
         // 忽略删除错误（可能不存在）
-        console.log(`[Blob] 删除旧 blob 时出错（可能不存在）: ${err.message}`);
+        logger.debug(`[Blob] 删除旧版本时出错（可能不存在）: ${err.message}`);
     }
-    
+
     // 创建新的 blob
     try {
         const result = await put(key, payload, {
@@ -171,10 +175,10 @@ async function writeJSONBlob(key, data) {
             token: BLOB_TOKEN, // 显式传入 token
             addRandomSuffix: false, // 不添加随机后缀
         });
-        console.log(`[Blob] ✅ 成功创建新 blob: ${key}, URL: ${result.url}`);
+        logger.logBlobOperation('写入', key, true, { url: result.url, size: payload.length });
         return result;
     } catch (err) {
-        console.error(`[Blob] ❌ 创建新 blob 失败: ${key}`, err);
+        logger.logBlobOperation('写入', key, false, { error: err.message });
         throw err;
     }
 }

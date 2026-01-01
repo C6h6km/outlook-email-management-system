@@ -3,6 +3,7 @@
  */
 
 const mailboxService = require('../services/mailbox.service');
+const logger = require('../utils/logger');
 
 class MailboxController {
     /**
@@ -67,15 +68,16 @@ class MailboxController {
                 data: mailbox,
             });
         } catch (error) {
-            console.error('添加邮箱失败:', error);
-            
-            const status = error.message === '邮箱已存在' ? 409 : 
-                          error.message.includes('缺少') ? 400 : 500;
-            
+            logger.error('添加邮箱失败', { error: error.message, body: req.body });
+
+            const status = error.message === '邮箱已存在' ? 409 :
+                          error.message.includes('缺少') ? 400 :
+                          error.message.includes('格式无效') ? 400 :
+                          error.message.includes('过长') ? 400 : 500;
+
             res.status(status).json({
                 success: false,
-                error: '添加邮箱失败',
-                details: error.message,
+                error: error.message,  // 返回实际错误消息
             });
         }
     }
@@ -156,6 +158,31 @@ class MailboxController {
             });
         }
     }
+
+    /**
+     * 批量删除邮箱（软删除）
+     */
+    async deleteBatch(req, res) {
+        try {
+            const { ids } = req.body;
+            const result = await mailboxService.deleteMailboxesBatch(ids);
+
+            res.json({
+                success: true,
+                ...result,
+            });
+        } catch (error) {
+            console.error('批量删除邮箱失败:', error);
+
+            const status = error.message.includes('缺少') ? 400 : 500;
+
+            res.status(status).json({
+                success: false,
+                error: '批量删除邮箱失败',
+                details: error.message,
+            });
+        }
+    }
     
     /**
      * 获取统计信息
@@ -173,6 +200,42 @@ class MailboxController {
             res.status(500).json({
                 success: false,
                 error: '获取统计信息失败',
+                details: error.message,
+            });
+        }
+    }
+
+    /**
+     * 检测指定来源的邮箱有效性（默认仅购买的邮箱），外部 API 返回 500 时视为失效并软删除
+     */
+    async validatePurchased(req, res) {
+        try {
+            const { ids } = req.body || {};
+            const result = await mailboxService.validateMailboxesBySource(ids || [], 'purchase');
+            res.json({ success: true, ...result });
+        } catch (error) {
+            console.error('检测邮箱有效性失败:', error);
+            res.status(500).json({
+                success: false,
+                error: '检测邮箱有效性失败',
+                details: error.message,
+            });
+        }
+    }
+
+    /**
+     * 检测所有来源的邮箱有效性，外部 API 返回 500 时视为失效并软删除
+     */
+    async validateAll(req, res) {
+        try {
+            const { ids } = req.body || {};
+            const result = await mailboxService.validateMailboxesBySource(ids || [], null);
+            res.json({ success: true, ...result });
+        } catch (error) {
+            console.error('检测全部邮箱有效性失败:', error);
+            res.status(500).json({
+                success: false,
+                error: '检测邮箱有效性失败',
                 details: error.message,
             });
         }

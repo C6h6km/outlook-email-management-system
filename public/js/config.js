@@ -67,9 +67,10 @@ export const APP_CONFIG = {
 
 // 采购API配置
 export const PURCHASE_CONFIG = {
-    // 内置默认凭证（生产环境应该从环境变量读取）
-    DEFAULT_APP_ID: '1097',
-    DEFAULT_APP_KEY: 'A2380737CA36CC61',
+    // ⚠️ 安全改进：默认凭证已移至后端
+    // 前端不再存储 API 密钥，通过后端代理调用
+    DEFAULT_APP_ID: '',  // 留空，由后端提供
+    DEFAULT_APP_KEY: '', // 留空，由后端提供
     
     // 仓库配置
     LIBRARIES: {

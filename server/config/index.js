@@ -33,7 +33,19 @@ const config = {
         '1': 'https://outlook007.cc/api',
         '2': 'https://outlook007.cc/api1',
     },
-    
+
+    // 采购API凭证（从环境变量读取，避免前端暴露）
+    purchaseCredentials: {
+        appId: process.env.PURCHASE_APP_ID || '1097',
+        appKey: process.env.PURCHASE_APP_KEY || 'A2380737CA36CC61',
+    },
+
+    // 外部邮件 API 配置（从环境变量读取，避免前端暴露）
+    externalMailApi: {
+        baseUrl: process.env.EXTERNAL_MAIL_API_URL || 'https://api.1181180.xyz/api',
+        password: process.env.EXTERNAL_MAIL_API_PASSWORD || '',
+    },
+
     // 日志配置
     logLevel: process.env.LOG_LEVEL || 'info',
     

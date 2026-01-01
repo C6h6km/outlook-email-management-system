@@ -7,6 +7,12 @@
 import { debounce, throttle, escapeHtml, formatDate, batchUpdateDOM } from './utils.js';
 import { EmailListManager, MailboxListManager } from './email-list-manager.js';
 import { errorHandler, ErrorBoundary, ErrorRecovery } from './error-handler.js';
+import {
+    buildMailApiUrl,
+    callMailApi,
+    extractEmailsFromResponse,
+    getSelectedMailbox
+} from './mail-api-utils.js';
 
 // 应用状态
 const AppState = {
@@ -14,8 +20,8 @@ const AppState = {
     selectedMailboxIndex: -1,
     emailListData: [],
     selectedEmailIndex: -1,
-    apiBaseUrl: '',
-    apiPassword: '',
+    bulkDeleteMode: false,
+    // API 配置已移至后端环境变量，前端不再存储
 };
 
 // API配置（简化版，避免循环依赖）
@@ -144,25 +150,103 @@ export async function initApp() {
     }
 }
 
+// ==================== 折叠/展开功能 ====================
+// 必须在 loadSettings() 之前定义，因为 loadSettings() 会调用这些函数
+
+window.toggleImportSection = function(saveState = true) {
+    const content = document.getElementById('importContent');
+    const btn = document.getElementById('toggleImportBtn');
+    const status = document.getElementById('sectionStatus');
+
+    if (content.classList.contains('collapsed')) {
+        content.classList.remove('collapsed');
+        btn.textContent = '▼';
+        status.textContent = '展开';
+        if (saveState) localStorage.setItem('importSectionCollapsed', 'false');
+    } else {
+        content.classList.add('collapsed');
+        btn.textContent = '▶';
+        status.textContent = '收起';
+        if (saveState) localStorage.setItem('importSectionCollapsed', 'true');
+    }
+};
+
+window.togglePurchaseSection = function(saveState = true) {
+    const content = document.getElementById('purchaseContent');
+    const btn = document.getElementById('togglePurchaseBtn');
+    const status = document.getElementById('purchaseSectionStatus');
+
+    if (content.classList.contains('collapsed')) {
+        content.classList.remove('collapsed');
+        btn.textContent = '▼';
+        status.textContent = '展开';
+        if (saveState) localStorage.setItem('purchaseSectionCollapsed', 'false');
+    } else {
+        content.classList.add('collapsed');
+        btn.textContent = '▶';
+        status.textContent = '收起';
+        if (saveState) localStorage.setItem('purchaseSectionCollapsed', 'true');
+    }
+};
+
+window.toggleMailboxSection = function(saveState = true) {
+    const content = document.getElementById('mailboxContent');
+    const btn = document.getElementById('toggleMailboxBtn');
+    const status = document.getElementById('mailboxSectionStatus');
+
+    if (content.classList.contains('collapsed')) {
+        content.classList.remove('collapsed');
+        btn.textContent = '▼';
+        status.textContent = '展开';
+        if (saveState) localStorage.setItem('mailboxSectionCollapsed', 'false');
+    } else {
+        content.classList.add('collapsed');
+        btn.textContent = '▶';
+        status.textContent = '收起';
+        if (saveState) localStorage.setItem('mailboxSectionCollapsed', 'true');
+    }
+};
+
 /**
  * 加载设置
  */
 function loadSettings() {
-    // 加载API设置
-    AppState.apiPassword = localStorage.getItem('apiPassword') || '';
-    AppState.apiBaseUrl = localStorage.getItem('apiBaseUrl') || 'https://api.1181180.xyz/api';
-    
-    document.getElementById('apiPassword').value = AppState.apiPassword;
-    document.getElementById('apiBaseUrl').value = AppState.apiBaseUrl;
+    // API 配置已移至后端环境变量（EXTERNAL_MAIL_API_URL, EXTERNAL_MAIL_API_PASSWORD）
+    // 前端不再需要配置 API 地址和密码
+
+    // 检测是否为移动设备
+    const isMobile = window.innerWidth <= 768;
     
     // 加载折叠状态
-    const importCollapsed = localStorage.getItem('importSectionCollapsed') === 'true';
-    const purchaseCollapsed = localStorage.getItem('purchaseSectionCollapsed') === 'true';
-    const mailboxCollapsed = localStorage.getItem('mailboxSectionCollapsed') === 'true';
+    const importCollapsed = localStorage.getItem('importSectionCollapsed');
+    const purchaseCollapsed = localStorage.getItem('purchaseSectionCollapsed');
+    const mailboxCollapsed = localStorage.getItem('mailboxSectionCollapsed');
     
-    if (importCollapsed) toggleImportSection(false);
-    if (!purchaseCollapsed) togglePurchaseSection(false);
-    if (mailboxCollapsed) toggleMailboxSection(false);
+    // 移动端默认折叠设置区域，保持购买区域折叠，展开邮箱列表
+    if (isMobile) {
+        // 移动端：默认折叠设置区域（除非用户之前打开过）
+        if (importCollapsed !== 'false') {
+            // 设置区域默认折叠
+            // HTML中已经设置为collapsed，不需要额外操作
+        } else {
+            toggleImportSection(false);
+        }
+        
+        // 购买区域保持折叠（默认就是折叠的）
+        if (purchaseCollapsed === 'false') {
+            togglePurchaseSection(false);
+        }
+        
+        // 邮箱列表默认展开（最常用）
+        if (mailboxCollapsed === 'true') {
+            toggleMailboxSection(false);
+        }
+    } else {
+        // 桌面端：使用保存的状态
+        if (importCollapsed === 'true') toggleImportSection(false);
+        if (purchaseCollapsed === 'false') togglePurchaseSection(false);
+        if (mailboxCollapsed === 'true') toggleMailboxSection(false);
+    }
 }
 
 /**
@@ -304,31 +388,54 @@ window.parseMailboxInput = async function() {
         setStatusMessage('请输入邮箱配置信息', 'error');
         return;
     }
-    
+
     setStatusMessage('正在解析和保存邮箱...', 'loading');
-    
+
     const separator = document.getElementById('separatorInput').value || '----';
     const lines = input.split('\n').filter(line => line.trim() !== '');
     const newMailboxes = [];
     let errorCount = 0;
-    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
     for (const line of lines) {
         const parts = line.trim().split(separator);
         if (parts.length < 4) {
             errorCount++;
             continue;
         }
-        
-        newMailboxes.push({
-            email: parts[0].trim(),
-            password: parts[1].trim(),
-            client_id: parts[2].trim(),
-            refresh_token: parts[3].trim()
-        });
+
+        const email = parts[0].trim();
+        const password = parts[1].trim();
+        const client_id = parts[2].trim();
+        const refresh_token = parts[3].trim();
+
+        // 前端验证
+        if (!email || !password || !client_id || !refresh_token) {
+            errorCount++;
+            console.warn('跳过空字段行:', line.substring(0, 50));
+            continue;
+        }
+
+        // 验证邮箱格式
+        if (!emailRegex.test(email)) {
+            errorCount++;
+            console.warn('跳过无效邮箱格式:', email);
+            continue;
+        }
+
+        // 验证长度
+        if (email.length > 255 || password.length > 1024 ||
+            client_id.length > 255 || refresh_token.length > 2048) {
+            errorCount++;
+            console.warn('跳过超长字段:', email);
+            continue;
+        }
+
+        newMailboxes.push({ email, password, client_id, refresh_token, source: 'manual' });
     }
-    
+
     if (newMailboxes.length === 0) {
-        setStatusMessage('未找到有效的邮箱配置', 'error');
+        setStatusMessage(`未找到有效的邮箱配置（${errorCount} 行格式错误）`, 'error');
         return;
     }
     
@@ -340,18 +447,26 @@ window.parseMailboxInput = async function() {
             body: JSON.stringify({ mailboxes: newMailboxes })
         });
         
-        const result = await response.json();
-        
-        if (result.success) {
-            // 更新本地状态
-            AppState.mailboxes = [...AppState.mailboxes, ...result.data];
-            mailboxListManager.updateMailboxes(AppState.mailboxes);
+            const result = await response.json();
+            
+            if (result.success) {
+                // 更新本地状态
+                AppState.mailboxes = [...AppState.mailboxes, ...result.data];
+                mailboxListManager.updateMailboxes(AppState.mailboxes);
             
             const message = `成功添加 ${result.added} 个邮箱` +
                           (result.skipped > 0 ? `，跳过 ${result.skipped} 个重复邮箱` : '') +
                           (errorCount > 0 ? `，${errorCount} 个格式错误` : '');
             
             setStatusMessage(message, 'success');
+
+            const newIds = (saveResult && saveResult.data ? saveResult.data : [])
+                .map(m => m.id)
+                .filter(Boolean);
+            if (newIds.length > 0) {
+                setStatusMessage('正在校验新购买的邮箱...', 'loading');
+                validatePurchasedMailboxes(newIds);
+            }
             document.getElementById('mailboxInput').value = '';
         } else {
             throw new Error(result.error);
@@ -469,64 +584,66 @@ async function deleteMailbox(index) {
 }
 
 /**
- * 加载邮件列表 - 使用防抖优化
+ * 批量删除选中的邮箱
  */
-const loadEmailListInternal = debounce(async function() {
-    if (AppState.selectedMailboxIndex === -1) {
-        setStatusMessage('请先选择一个邮箱', 'error');
+window.bulkDeleteMailboxes = async function() {
+    const selected = mailboxListManager.getBatchSelectedMailboxes();
+    if (!selected || selected.length === 0) {
+        setStatusMessage('请先勾选要删除的邮箱', 'error');
         return;
     }
-    
-    const mailbox = AppState.mailboxes[AppState.selectedMailboxIndex];
-    const folder = document.getElementById('mailboxFolderList').value;
-    
-    setStatusMessage(`正在加载${folder === 'INBOX' ? '收件箱' : '垃圾箱'}邮件...`, 'loading');
-    
+
+    const ids = selected.map(m => m.id).filter(Boolean);
+    if (ids.length === 0) {
+        setStatusMessage('选中的邮箱缺少ID，无法删除', 'error');
+        return;
+    }
+
+    if (!confirm(`确定要删除选中的 ${selected.length} 个邮箱吗？此操作不可恢复。`)) {
+        return;
+    }
+
     try {
-        const apiBaseUrl = AppState.apiBaseUrl || document.getElementById('apiBaseUrl').value.trim();
-        if (!apiBaseUrl) {
-            throw new Error('请先填写API地址');
-        }
-        
-        let url = `${apiBaseUrl}/mail-all?refresh_token=${encodeURIComponent(mailbox.refresh_token)}&client_id=${encodeURIComponent(mailbox.client_id)}&email=${encodeURIComponent(mailbox.email)}&mailbox=${folder}`;
-        
-        if (AppState.apiPassword) {
-            url += `&password=${encodeURIComponent(AppState.apiPassword)}`;
-        }
-        
-        const response = await fetch(url);
-        
-        // 检查HTTP状态
-        if (!response.ok) {
-            throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        // 检查API返回的数据格式
-        let emails = [];
-        if (Array.isArray(data)) {
-            emails = data;
-        } else if (data && data.data && Array.isArray(data.data)) {
-            emails = data.data;
-        } else if (data && !data.error && !data.message) {
-            // 只有在不是错误响应时才当作邮件数据
-            emails = [data];
-        } else {
-            // API返回了错误
-            throw new Error(data.message || data.error || '获取邮件失败');
-        }
-        
-        // 按日期排序（最新的在前）
-        emails.sort((a, b) => {
-            const dateA = new Date(a.date || a.timestamp || 0);
-            const dateB = new Date(b.date || b.timestamp || 0);
-            return dateB - dateA;
+        const response = await fetch(`${SUPABASE_API_BASE}/mailboxes/batch-delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids })
         });
-        
+
+        const result = await response.json();
+        if (!response.ok || result.success === false) {
+            throw new Error(result.error || '批量删除失败');
+        }
+
+        // 更新本地状态
+        AppState.mailboxes = AppState.mailboxes.filter(m => !ids.includes(m.id));
+        mailboxListManager.updateMailboxes(AppState.mailboxes);
+        mailboxListManager.clearBatchSelection();
+
+        setStatusMessage(`批量删除成功：${result.deleted || ids.length} 个`, 'success');
+        clearEmailDisplay();
+    } catch (error) {
+        setStatusMessage(`批量删除失败: ${error.message}`, 'error');
+    }
+};
+
+/**
+ * 加载邮件列表 - 使用防抖优化
+ * 重构版本：消除代码重复，使用统一工具函数
+ */
+const loadEmailListInternal = debounce(async function() {
+    const folder = document.getElementById('mailboxFolderList').value;
+    setStatusMessage(`正在加载${folder === 'INBOX' ? '收件箱' : '垃圾箱'}邮件...`, 'loading');
+
+    try {
+        const mailbox = getSelectedMailbox(AppState);
+        const url = buildMailApiUrl('emails', mailbox, { folder: folder });
+        const data = await callMailApi(url);
+        const emails = extractEmailsFromResponse(data);
+
         AppState.emailListData = emails;
         emailListManager.updateEmails(emails);
-        
+
         console.log('✅ 邮件列表已更新:', emails.length);
         setStatusMessage(`已加载 ${emails.length} 封邮件`, 'success');
     } catch (error) {
@@ -629,6 +746,55 @@ window.clearEmailDisplay = function() {
 };
 
 /**
+ * 切换批量删除模式
+ */
+window.toggleBulkDeleteMode = function() {
+    AppState.bulkDeleteMode = !AppState.bulkDeleteMode;
+    mailboxListManager.setBulkMode(AppState.bulkDeleteMode);
+
+    const actions = document.getElementById('bulkDeleteActions');
+    const toggleBtn = document.getElementById('bulkDeleteToggle');
+
+    if (AppState.bulkDeleteMode) {
+        actions.style.display = 'flex';
+        toggleBtn.textContent = '关闭批量删除';
+        setStatusMessage('批量删除模式已开启，请勾选邮箱', 'info');
+    } else {
+        actions.style.display = 'none';
+        toggleBtn.textContent = '开启批量删除';
+        mailboxListManager.clearBatchSelection();
+        setStatusMessage('已退出批量删除模式', 'info');
+    }
+};
+
+/**
+ * 全选/全不选
+ */
+window.bulkToggleSelectAll = function() {
+    const total = mailboxListManager.getMailboxes().length;
+    const selected = mailboxListManager.getBatchSelectedCount();
+    if (total === 0) {
+        setStatusMessage('没有邮箱可选择', 'error');
+        return;
+    }
+    if (selected < total) {
+        mailboxListManager.selectAllMailboxes();
+        setStatusMessage(`已全选 ${total} 个邮箱`, 'success');
+    } else {
+        mailboxListManager.clearBatchSelection();
+        setStatusMessage('已取消全选', 'info');
+    }
+};
+
+/**
+ * 清空选择
+ */
+window.bulkClearSelection = function() {
+    mailboxListManager.clearBatchSelection();
+    setStatusMessage('已清空选择', 'info');
+};
+
+/**
  * 切换标签页
  */
 window.switchTab = function(tabId) {
@@ -657,69 +823,10 @@ window.setStatusMessage = function(message, type = 'info') {
     }
 };
 
-// 折叠/展开功能
-window.toggleImportSection = function(saveState = true) {
-    const content = document.getElementById('importContent');
-    const btn = document.getElementById('toggleImportBtn');
-    const status = document.getElementById('sectionStatus');
-    
-    if (content.classList.contains('collapsed')) {
-        content.classList.remove('collapsed');
-        btn.textContent = '▼';
-        status.textContent = '展开';
-        if (saveState) localStorage.setItem('importSectionCollapsed', 'false');
-    } else {
-        content.classList.add('collapsed');
-        btn.textContent = '▶';
-        status.textContent = '收起';
-        if (saveState) localStorage.setItem('importSectionCollapsed', 'true');
-    }
-};
-
-window.togglePurchaseSection = function(saveState = true) {
-    const content = document.getElementById('purchaseContent');
-    const btn = document.getElementById('togglePurchaseBtn');
-    const status = document.getElementById('purchaseSectionStatus');
-    
-    if (content.classList.contains('collapsed')) {
-        content.classList.remove('collapsed');
-        btn.textContent = '▼';
-        status.textContent = '展开';
-        if (saveState) localStorage.setItem('purchaseSectionCollapsed', 'false');
-    } else {
-        content.classList.add('collapsed');
-        btn.textContent = '▶';
-        status.textContent = '收起';
-        if (saveState) localStorage.setItem('purchaseSectionCollapsed', 'true');
-    }
-};
-
-window.toggleMailboxSection = function(saveState = true) {
-    const content = document.getElementById('mailboxContent');
-    const btn = document.getElementById('toggleMailboxBtn');
-    const status = document.getElementById('mailboxSectionStatus');
-    
-    if (content.classList.contains('collapsed')) {
-        content.classList.remove('collapsed');
-        btn.textContent = '▼';
-        status.textContent = '展开';
-        if (saveState) localStorage.setItem('mailboxSectionCollapsed', 'false');
-    } else {
-        content.classList.add('collapsed');
-        btn.textContent = '▶';
-        status.textContent = '收起';
-        if (saveState) localStorage.setItem('mailboxSectionCollapsed', 'true');
-    }
-};
-
+// ⚠️ API 设置已移至后端环境变量，前端不再需要 saveApiSettings 函数
+// 保留空函数以避免 HTML onclick 报错
 window.saveApiSettings = function() {
-    AppState.apiBaseUrl = document.getElementById('apiBaseUrl').value.trim();
-    AppState.apiPassword = document.getElementById('apiPassword').value;
-    
-    localStorage.setItem('apiBaseUrl', AppState.apiBaseUrl);
-    localStorage.setItem('apiPassword', AppState.apiPassword);
-    
-    setStatusMessage('API设置已保存', 'success');
+    setStatusMessage('API 配置已迁移至后端环境变量，请在 Vercel 项目设置中配置', 'info');
 };
 
 // 采购相关功能
@@ -770,31 +877,28 @@ window.checkStock = async function() {
         if (data && data.code === 200 && data.data) {
             const stockNum = data.data.stock || 0;
             const productName = data.data.name || '未知';
-            
-            stockDisplay.innerHTML = `
-                产品: ${productName}<br>
-                库存: ${stockNum} 个
-            `;
+
+            // 防止 XSS：使用 textContent 而不是 innerHTML
+            stockDisplay.textContent = `产品: ${productName}\n库存: ${stockNum} 个`;
             stockDisplay.style.color = stockNum > 0 ? '#27ae60' : '#e74c3c';
             setStatusMessage('库存查询成功', 'success');
         } else if (data && data.num !== undefined) {
             const stockNum = data.num || 0;
             const productName = data.name || '未知';
-            
-            stockDisplay.innerHTML = `
-                产品: ${productName}<br>
-                库存: ${stockNum} 个
-            `;
+
+            // 防止 XSS：使用 textContent 而不是 innerHTML
+            stockDisplay.textContent = `产品: ${productName}\n库存: ${stockNum} 个`;
             stockDisplay.style.color = stockNum > 0 ? '#27ae60' : '#e74c3c';
             setStatusMessage('库存查询成功', 'success');
         } else {
-            stockDisplay.innerHTML = '库存查询失败：数据格式错误';
+            stockDisplay.textContent = '库存查询失败：数据格式错误';
             stockDisplay.style.color = '#e74c3c';
             setStatusMessage('库存查询失败：数据格式错误', 'error');
         }
     } catch (error) {
         console.error('查询库存失败:', error);
-        stockDisplay.innerHTML = `查询失败: ${error.message}`;
+        // 防止 XSS：使用 textContent
+        stockDisplay.textContent = `查询失败: ${error.message}`;
         stockDisplay.style.color = '#e74c3c';
         setStatusMessage('查询库存失败: ' + error.message, 'error');
     }
@@ -808,70 +912,66 @@ window.updateStockDisplay = function() {
 };
 
 // 查询余额
+// ⚠️ 安全改进：API 凭证已移至后端，前端无需发送
 window.checkBalance = async function() {
-    const finalAppId = '1097';
-    const finalAppKey = 'A2380737CA36CC61';
     const balanceDisplay = document.getElementById('balanceDisplay');
-    
+
     balanceDisplay.innerHTML = '正在查询余额...';
     setStatusMessage('正在查询余额...', 'loading');
-    
+
     try {
         const lib = document.getElementById('purchaseLibrary').value || '1';
         const response = await fetch(`${SUPABASE_API_BASE}/proxy/balance`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ app_id: finalAppId, app_key: finalAppKey, library: lib })
+            body: JSON.stringify({ library: lib })  // 不再发送 app_id 和 app_key
         });
         
         const data = await response.json();
         document.getElementById('rawData').textContent = JSON.stringify(data, null, 2);
         
         if (data.code === 200 && data.data) {
-            balanceDisplay.innerHTML = `
-                用户: ${data.data.username || '未知用户'} (ID: ${data.data.id || '未知'})<br>
-                余额: ¥${data.data.balance || '0.00'}
-            `;
+            // 防止 XSS：使用 textContent
+            const username = data.data.username || '未知用户';
+            const userId = data.data.id || '未知';
+            const balance = data.data.balance || '0.00';
+            balanceDisplay.textContent = `用户: ${username} (ID: ${userId})\n余额: ¥${balance}`;
             balanceDisplay.style.color = '#27ae60';
             setStatusMessage('余额查询成功', 'success');
         } else {
             throw new Error(data.message || '查询失败');
         }
     } catch (error) {
-        balanceDisplay.innerHTML = `查询失败: ${error.message}`;
+        // 防止 XSS：使用 textContent
+        balanceDisplay.textContent = `查询失败: ${error.message}`;
         balanceDisplay.style.color = '#e74c3c';
         setStatusMessage('查询余额失败: ' + error.message, 'error');
     }
 };
 
 // 购买邮箱
+// ⚠️ 安全改进：API 凭证已移至后端，前端无需发送
 window.purchaseEmails = async function() {
-    const appId = '';
-    const appKey = '';
     const commodityId = document.getElementById('commodityId').value;
     const num = parseInt(document.getElementById('purchaseNum').value);
-    
-    const finalAppId = appId || '1097';
-    const finalAppKey = appKey || 'A2380737CA36CC61';
-    
+
     if (!num || num < 1 || num > 2000) {
         setStatusMessage('购买数量必须在1-2000之间', 'error');
         return;
     }
-    
+
     setStatusMessage('正在购买邮箱...', 'loading');
-    
+
     try {
         const lib = document.getElementById('purchaseLibrary').value || '1';
         const response = await fetch(`${API_CONFIG.BASE_URL}/proxy/purchase`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                app_id: finalAppId,
-                app_key: finalAppKey,
                 commodity_id: commodityId,
                 num: num,
                 library: lib
+                // 不再发送 app_id 和 app_key
             })
         });
         
@@ -892,7 +992,8 @@ window.purchaseEmails = async function() {
                             email: parts[0],
                             password: parts[1],
                             client_id: parts[2],
-                            refresh_token: parts[3]
+                            refresh_token: parts[3],
+                            source: 'purchase'
                         };
                         
                         const exists = AppState.mailboxes.some(m => m.email.toLowerCase() === parts[0].toLowerCase());
@@ -914,11 +1015,23 @@ window.purchaseEmails = async function() {
             // 保存到服务器
             if (newMailboxes.length > 0) {
                 try {
-                    await fetch(`${API_CONFIG.BASE_URL}/mailboxes/batch`, {
+                    const saveResp = await fetch(`${API_CONFIG.BASE_URL}/mailboxes/batch`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ mailboxes: newMailboxes })
                     });
+                    const saveResult = await saveResp.json();
+                    if (saveResp.ok && saveResult.data) {
+                        // 用服务端返回的数据（含ID）刷新本地列表
+                        const existingEmails = new Set(AppState.mailboxes.map(m => m.email.toLowerCase()));
+                        const returned = saveResult.data.map(m => ({ ...m, source: m.source || 'purchase' }));
+                        const merged = [
+                            ...AppState.mailboxes.filter(m => existingEmails.has(m.email.toLowerCase())),
+                            ...returned
+                        ];
+                        AppState.mailboxes = merged;
+                        mailboxListManager.updateMailboxes(AppState.mailboxes);
+                    }
                 } catch (e) {
                     console.error('保存到服务器失败:', e);
                 }
@@ -939,48 +1052,72 @@ window.purchaseEmails = async function() {
     }
 };
 
+/**
+ * 购买后自动校验新邮箱（仅来源 purchase）
+ */
+async function validatePurchasedMailboxes(ids = []) {
+    try {
+        const response = await fetch(`${SUPABASE_API_BASE}/mailboxes/validate-purchased`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids })
+        });
+        const result = await response.json();
+        if (!response.ok || result.success === false) {
+            throw new Error(result.error || '校验失败');
+        }
+
+        AppState.mailboxes = result.data || AppState.mailboxes;
+        mailboxListManager.updateMailboxes(AppState.mailboxes);
+        setStatusMessage(`校验完成：检测 ${result.checked || 0} 个，移除 ${result.removed || 0} 个`, 'info');
+    } catch (error) {
+        console.warn('购买后校验失败:', error);
+    }
+}
+
+/**
+ * 手动触发：检测数据库中所有邮箱的有效性（所有来源）
+ */
+window.validateAllMailboxes = async function() {
+    setStatusMessage('正在检测所有邮箱有效性...', 'loading');
+    try {
+        const response = await fetch(`${SUPABASE_API_BASE}/mailboxes/validate-all`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await response.json();
+        if (!response.ok || result.success === false) {
+            throw new Error(result.error || '检测失败');
+        }
+
+        AppState.mailboxes = result.data || [];
+        mailboxListManager.updateMailboxes(AppState.mailboxes);
+        mailboxListManager.clearBatchSelection();
+
+        setStatusMessage(`检测完成：检测 ${result.checked || 0} 个，移除 ${result.removed || 0} 个`, 'success');
+        clearEmailDisplay();
+    } catch (error) {
+        setStatusMessage(`检测邮箱失败: ${error.message}`, 'error');
+    }
+};
+
 // 清空收件箱和垃圾箱 - 使用防抖避免误操作
 window.clearInbox = debounce(async function() {
-    if (AppState.selectedMailboxIndex === -1) {
-        setStatusMessage('请先选择一个邮箱', 'error');
-        return;
-    }
-    
     if (!confirm('确定要清空所选邮箱的收件箱吗？此操作不可恢复！')) {
         return;
     }
-    
-    const mailbox = AppState.mailboxes[AppState.selectedMailboxIndex];
+
     setStatusMessage('正在清空收件箱...', 'loading');
-    
+
     try {
-        const apiBaseUrl = AppState.apiBaseUrl || document.getElementById('apiBaseUrl').value.trim();
-        if (!apiBaseUrl) throw new Error('请先填写API地址');
-        
-        let url = `${apiBaseUrl}/process-inbox?refresh_token=${encodeURIComponent(mailbox.refresh_token)}&client_id=${encodeURIComponent(mailbox.client_id)}&email=${encodeURIComponent(mailbox.email)}`;
-        
-        if (AppState.apiPassword) {
-            url += `&password=${encodeURIComponent(AppState.apiPassword)}`;
-        }
-        
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
+        const mailbox = getSelectedMailbox(AppState);
+        const url = buildMailApiUrl('process-inbox', mailbox);
+        const data = await callMailApi(url);
+
         document.getElementById('rawData').textContent = JSON.stringify(data, null, 2);
-        
-        // 检查是否成功
-        if (data.error || data.message) {
-            throw new Error(data.message || data.error || '清空失败');
-        }
-        
         clearEmailDisplay();
         emailListManager.clear();
-        
+
         setStatusMessage('收件箱清空成功', 'success');
     } catch (error) {
         setStatusMessage('清空收件箱失败: ' + error.message, 'error');
@@ -988,46 +1125,21 @@ window.clearInbox = debounce(async function() {
 }, 1000);
 
 window.clearJunk = debounce(async function() {
-    if (AppState.selectedMailboxIndex === -1) {
-        setStatusMessage('请先选择一个邮箱', 'error');
-        return;
-    }
-    
     if (!confirm('确定要清空所选邮箱的垃圾箱吗？此操作不可恢复！')) {
         return;
     }
-    
-    const mailbox = AppState.mailboxes[AppState.selectedMailboxIndex];
+
     setStatusMessage('正在清空垃圾箱...', 'loading');
-    
+
     try {
-        const apiBaseUrl = AppState.apiBaseUrl || document.getElementById('apiBaseUrl').value.trim();
-        if (!apiBaseUrl) throw new Error('请先填写API地址');
-        
-        let url = `${apiBaseUrl}/process-junk?refresh_token=${encodeURIComponent(mailbox.refresh_token)}&client_id=${encodeURIComponent(mailbox.client_id)}&email=${encodeURIComponent(mailbox.email)}`;
-        
-        if (AppState.apiPassword) {
-            url += `&password=${encodeURIComponent(AppState.apiPassword)}`;
-        }
-        
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
+        const mailbox = getSelectedMailbox(AppState);
+        const url = buildMailApiUrl('process-junk', mailbox);
+        const data = await callMailApi(url);
+
         document.getElementById('rawData').textContent = JSON.stringify(data, null, 2);
-        
-        // 检查是否成功
-        if (data.error || data.message) {
-            throw new Error(data.message || data.error || '清空失败');
-        }
-        
         clearEmailDisplay();
         emailListManager.clear();
-        
+
         setStatusMessage('垃圾箱清空成功', 'success');
     } catch (error) {
         setStatusMessage('清空垃圾箱失败: ' + error.message, 'error');
@@ -1040,58 +1152,39 @@ window.fetchEmail = async function() {
         setStatusMessage('请先选择一个邮箱', 'error');
         return;
     }
-    
+
     const mailbox = AppState.mailboxes[AppState.selectedMailboxIndex];
     const folder = document.getElementById('mailboxFolderList').value;
     const responseType = document.getElementById('responseType').value;
-    
+
     setStatusMessage('正在获取最新邮件...', 'loading');
     document.getElementById('loadingMessage').style.display = 'block';
     document.getElementById('emailFrame').style.display = 'none';
     document.getElementById('emptyState').style.display = 'none';
-    
+
     try {
-        const apiBaseUrl = AppState.apiBaseUrl || document.getElementById('apiBaseUrl').value.trim();
-        if (!apiBaseUrl) throw new Error('请先填写API地址');
-        
-        let url = `${apiBaseUrl}/mail-new?refresh_token=${encodeURIComponent(mailbox.refresh_token)}&client_id=${encodeURIComponent(mailbox.client_id)}&email=${encodeURIComponent(mailbox.email)}&mailbox=${folder}&response_type=${responseType}`;
-        
-        if (AppState.apiPassword) {
-            url += `&password=${encodeURIComponent(AppState.apiPassword)}`;
-        }
-        
-        const response = await fetch(url);
-        
-        // 检查HTTP状态
-        if (!response.ok) {
-            throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
+        // 使用后端代理，不再直接访问外部 API
+        const url = buildMailApiUrl('mail-new', mailbox, {
+            folder: folder,
+            response_type: responseType
+        });
+
+        const data = await callMailApi(url);
+
         document.getElementById('rawData').textContent = JSON.stringify(data, null, 2);
-        
-        // 检查API返回的数据
-        let emails = [];
-        if (Array.isArray(data)) {
-            emails = data;
-        } else if (data && data.data && Array.isArray(data.data)) {
-            emails = data.data;
-        } else if (data && !data.error && !data.message) {
-            emails = [data];
-        } else {
-            throw new Error(data.message || data.error || '获取邮件失败');
-        }
-        
+
+        // 提取邮件数据
+        const emails = extractEmailsFromResponse(data);
+
         if (!emails || emails.length === 0) {
             setStatusMessage('没有找到邮件', 'error');
             document.getElementById('emptyState').style.display = 'block';
             return;
         }
-        
+
         const email = emails[0];
         displaySelectedEmail(email);
-        
+
         // 刷新邮件列表
         loadEmailListInternal();
     } catch (error) {
@@ -1203,4 +1296,3 @@ if (document.readyState === 'loading') {
     initApp();
     initMobileView();
 }
-

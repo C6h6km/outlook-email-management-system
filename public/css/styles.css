@@ -65,6 +65,7 @@ body {
 /* 统一所有区域的边框样式 */
 .sidebar, .email-sidebar, .main-content {
     border-top: none;
+    align-items: stretch;
 }
 
 /* 导入邮箱区域样式 */
@@ -98,6 +99,8 @@ body {
     box-sizing: border-box;
     display: flex;
     align-items: center;
+    width: 100%;
+    flex: 0 0 auto;
 }
 
 .main-toolbar, .tabs {
@@ -161,6 +164,8 @@ body {
 }
 
 .section-content {
+    width: 100%;
+    display: block;
     overflow-y: auto;
     transition: all 0.3s ease;
     max-height: 300px; /* 限制高度，避免挤压其他区域 */
@@ -709,4 +714,3 @@ iframe {
 .raw-data {
     overscroll-behavior: contain;
 }
-
