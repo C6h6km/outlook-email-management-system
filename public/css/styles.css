@@ -46,30 +46,36 @@ body {
 }
 
 /* 侧边栏 */
-.sidebar, .email-sidebar {
+.sidebar,
+.email-sidebar {
     grid-row: 2;
     background-color: #f0f0f0;
     border-right: 1px solid #ddd;
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 60px); /* 减去头部高度 */
+    height: calc(100vh - 60px);
+    /* 减去头部高度 */
 }
+
 .sidebar {
     overflow-y: auto;
     overflow-x: hidden;
 }
+
 .email-sidebar {
     overflow: hidden;
 }
 
 /* 统一所有区域的边框样式 */
-.sidebar, .email-sidebar, .main-content {
+.sidebar,
+.email-sidebar,
+.main-content {
     border-top: none;
     align-items: stretch;
 }
 
 /* 导入邮箱区域样式 */
-.sidebar > .sidebar-section:first-child {
+.sidebar>.sidebar-section:first-child {
     overflow-y: visible;
 }
 
@@ -88,14 +94,17 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    height: calc(100vh - 60px); /* 减去头部高度 */
+    height: calc(100vh - 60px);
+    /* 减去头部高度 */
 }
 
 /* 统一所有区域的内部分界线样式 */
-.sidebar-section, .email-sidebar .sidebar-section {
+.sidebar-section,
+.email-sidebar .sidebar-section {
     padding: 10px;
     border-bottom: 1px solid #ddd;
-    min-height: 42px; /* 允许自适应高度，避免遮挡 */
+    min-height: 42px;
+    /* 允许自适应高度，避免遮挡 */
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -103,10 +112,12 @@ body {
     flex: 0 0 auto;
 }
 
-.main-toolbar, .tabs {
+.main-toolbar,
+.tabs {
     padding: 10px;
     border-bottom: 1px solid #ddd;
-    height: 42px; /* 保持固定高度 */
+    height: 42px;
+    /* 保持固定高度 */
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -121,7 +132,8 @@ body {
 }
 
 /* 统一标题文本样式 */
-.sidebar-section h2, .email-sidebar .sidebar-section h2 {
+.sidebar-section h2,
+.email-sidebar .sidebar-section h2 {
     font-size: 0.95rem;
     margin-bottom: 0;
     margin-top: 0;
@@ -158,6 +170,7 @@ body {
     flex: 0 0 auto;
     overflow: visible;
 }
+
 .mailbox-list {
     overflow: visible;
     max-height: none;
@@ -168,11 +181,13 @@ body {
     display: block;
     overflow-y: auto;
     transition: all 0.3s ease;
-    max-height: 300px; /* 限制高度，避免挤压其他区域 */
+    max-height: 300px;
+    /* 限制高度，避免挤压其他区域 */
     border-top: 1px solid #ddd;
     padding: 10px;
     margin-bottom: 0;
-    flex: 0 0 auto; /* 防止与其他区域互相遮挡，保持自然高度 */
+    flex: 0 0 auto;
+    /* 防止与其他区域互相遮挡，保持自然高度 */
 }
 
 .section-content.collapsed {
@@ -183,6 +198,7 @@ body {
     opacity: 0;
     visibility: hidden;
     overflow: hidden;
+    pointer-events: none;
 }
 
 /* 表单元素 */
@@ -613,7 +629,8 @@ iframe {
     background-color: #f0f8ff;
 }
 
-.drag-hint, .api-hint {
+.drag-hint,
+.api-hint {
     font-size: 0.75rem;
     color: #777;
     margin-top: 3px;
@@ -661,7 +678,8 @@ iframe {
 .section-content,
 .email-viewer,
 .raw-data {
-    scrollbar-width: thin; /* Firefox */
+    scrollbar-width: thin;
+    /* Firefox */
     scrollbar-color: #b8c2cc transparent;
     scrollbar-gutter: stable both-edges;
 }
@@ -691,7 +709,8 @@ iframe {
 .raw-data::-webkit-scrollbar-thumb {
     background-color: #c4ccd5;
     border-radius: 8px;
-    border: 2px solid transparent; /* creates inner padding */
+    border: 2px solid transparent;
+    /* creates inner padding */
     background-clip: content-box;
 }
 
@@ -709,6 +728,7 @@ iframe {
     padding-right: 4px;
     overscroll-behavior: contain;
 }
+
 .section-content,
 .email-viewer,
 .raw-data {

@@ -26,9 +26,9 @@ const AppState = {
 
 // API配置（简化版，避免循环依赖）
 const API_CONFIG = {
-    BASE_URL: (window.location.protocol === 'file:' || 
-               window.location.hostname === 'localhost' || 
-               window.location.hostname === '127.0.0.1')
+    BASE_URL: (window.location.protocol === 'file:' ||
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1')
         ? 'http://localhost:3001/api'
         : '/api'
 };
@@ -65,12 +65,12 @@ let mailboxListManager = null;
  */
 export async function initApp() {
     console.log('🚀 应用启动中...');
-    
+
     try {
         // 初始化全局错误处理器
         errorHandler.init();
         console.log('✅ 全局错误处理器已初始化');
-        
+
         // 创建错误边界
         const mainContentBoundary = new ErrorBoundary(
             document.querySelector('.main-content'),
@@ -80,7 +80,7 @@ export async function initApp() {
                 }
             }
         );
-        
+
         const emailListBoundary = new ErrorBoundary(
             document.querySelector('.email-sidebar'),
             {
@@ -89,30 +89,30 @@ export async function initApp() {
                 }
             }
         );
-        
+
         // 初始化列表管理器（使用错误边界包装）
         emailListManager = new EmailListManager('#emailList');
         mailboxListManager = new MailboxListManager('#mailboxList');
-        
+
         // 设置回调（使用错误边界包装）
         emailListManager.onSelect(mainContentBoundary.wrap(async (email, index) => {
             AppState.selectedEmailIndex = index;
             await displaySelectedEmail(email);
         }));
-        
+
         mailboxListManager.onSelect(emailListBoundary.wrap(async (mailbox, index) => {
             AppState.selectedMailboxIndex = index;
             setStatusMessage(`已选择邮箱: ${mailbox.email}`, 'success');
             await loadEmailListInternal();
         }));
-        
+
         mailboxListManager.onDelete(emailListBoundary.wrap(async (mailbox, index) => {
             await deleteMailbox(index);
         }));
-        
+
         // 加载保存的设置
         loadSettings();
-        
+
         // 加载邮箱数据（带错误恢复）
         await ErrorRecovery.withFallback(
             () => loadMailboxesFromStorage(),
@@ -122,19 +122,19 @@ export async function initApp() {
                 return [];
             }
         );
-        
+
         // 初始化UI组件
         initUIComponents();
-        
+
         // 初始化采购相关
         initPurchaseLibrary();
-        
+
         console.log('✅ 应用启动完成');
-        
+
     } catch (error) {
         console.error('❌ 应用启动失败:', error);
         errorHandler.handleError(error, { type: 'init', phase: 'startup' });
-        
+
         // 显示降级UI
         document.body.innerHTML = `
             <div style="display: flex; align-items: center; justify-content: center; height: 100vh; background: #f5f5f5;">
@@ -153,7 +153,7 @@ export async function initApp() {
 // ==================== 折叠/展开功能 ====================
 // 必须在 loadSettings() 之前定义，因为 loadSettings() 会调用这些函数
 
-window.toggleImportSection = function(saveState = true) {
+window.toggleImportSection = function (saveState = true) {
     const content = document.getElementById('importContent');
     const btn = document.getElementById('toggleImportBtn');
     const status = document.getElementById('sectionStatus');
@@ -171,7 +171,7 @@ window.toggleImportSection = function(saveState = true) {
     }
 };
 
-window.togglePurchaseSection = function(saveState = true) {
+window.togglePurchaseSection = function (saveState = true) {
     const content = document.getElementById('purchaseContent');
     const btn = document.getElementById('togglePurchaseBtn');
     const status = document.getElementById('purchaseSectionStatus');
@@ -189,7 +189,7 @@ window.togglePurchaseSection = function(saveState = true) {
     }
 };
 
-window.toggleMailboxSection = function(saveState = true) {
+window.toggleMailboxSection = function (saveState = true) {
     const content = document.getElementById('mailboxContent');
     const btn = document.getElementById('toggleMailboxBtn');
     const status = document.getElementById('mailboxSectionStatus');
@@ -216,12 +216,12 @@ function loadSettings() {
 
     // 检测是否为移动设备
     const isMobile = window.innerWidth <= 768;
-    
+
     // 加载折叠状态
     const importCollapsed = localStorage.getItem('importSectionCollapsed');
     const purchaseCollapsed = localStorage.getItem('purchaseSectionCollapsed');
     const mailboxCollapsed = localStorage.getItem('mailboxSectionCollapsed');
-    
+
     // 移动端默认折叠设置区域，保持购买区域折叠，展开邮箱列表
     if (isMobile) {
         // 移动端：默认折叠设置区域（除非用户之前打开过）
@@ -231,12 +231,12 @@ function loadSettings() {
         } else {
             toggleImportSection(false);
         }
-        
+
         // 购买区域保持折叠（默认就是折叠的）
         if (purchaseCollapsed === 'false') {
             togglePurchaseSection(false);
         }
-        
+
         // 邮箱列表默认展开（最常用）
         if (mailboxCollapsed === 'true') {
             toggleMailboxSection(false);
@@ -255,18 +255,18 @@ function loadSettings() {
 function initUIComponents() {
     // 文件上传
     document.getElementById('fileInput').addEventListener('change', handleFileInput);
-    
+
     // 拖拽上传
     setupDragAndDrop();
-    
+
     // 分隔符输入 - 使用防抖
     const separatorInput = document.getElementById('separatorInput');
     const debouncedUpdatePlaceholder = debounce(updatePlaceholder, 300);
     separatorInput.addEventListener('input', debouncedUpdatePlaceholder);
-    
+
     // 初始化占位符
     updatePlaceholder();
-    
+
     // 邮件列表文件夹切换 - 使用防抖
     const folderSelect = document.getElementById('mailboxFolderList');
     const debouncedLoadEmails = debounce(() => {
@@ -278,7 +278,7 @@ function initUIComponents() {
 }
 
 // 暴露loadEmailList到全局作用域（供HTML onclick使用）
-window.loadEmailList = function() {
+window.loadEmailList = function () {
     loadEmailListInternal();
 };
 
@@ -287,26 +287,26 @@ window.loadEmailList = function() {
  */
 function setupDragAndDrop() {
     const dropzone = document.getElementById('mailboxInput');
-    
+
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropzone.addEventListener(eventName, (e) => {
             e.preventDefault();
             e.stopPropagation();
         });
     });
-    
+
     ['dragenter', 'dragover'].forEach(eventName => {
         dropzone.addEventListener(eventName, () => {
             dropzone.classList.add('dragover');
         });
     });
-    
+
     ['dragleave', 'drop'].forEach(eventName => {
         dropzone.addEventListener(eventName, () => {
             dropzone.classList.remove('dragover');
         });
     });
-    
+
     dropzone.addEventListener('drop', (e) => {
         const files = e.dataTransfer.files;
         if (files.length) {
@@ -339,7 +339,7 @@ function readTextFile(file, callback) {
 function handleFileInput(event) {
     const file = event.target.files[0];
     if (!file) return;
-    
+
     readTextFile(file, (content) => {
         document.getElementById('mailboxInput').value = content;
         setStatusMessage('文件已加载，请点击"添加邮箱"进行解析', 'success');
@@ -362,11 +362,11 @@ async function loadMailboxesFromStorage() {
     try {
         const response = await fetch(`${SUPABASE_API_BASE}/mailboxes`);
         const result = await response.json();
-        
+
         if (result.success) {
             AppState.mailboxes = result.data || [];
             mailboxListManager.updateMailboxes(AppState.mailboxes);
-            
+
             if (AppState.mailboxes.length > 0) {
                 setStatusMessage(`已加载 ${AppState.mailboxes.length} 个邮箱`, 'success');
             }
@@ -382,7 +382,7 @@ async function loadMailboxesFromStorage() {
 /**
  * 解析并添加邮箱
  */
-window.parseMailboxInput = async function() {
+window.parseMailboxInput = async function () {
     const input = document.getElementById('mailboxInput').value.trim();
     if (!input) {
         setStatusMessage('请输入邮箱配置信息', 'error');
@@ -438,7 +438,7 @@ window.parseMailboxInput = async function() {
         setStatusMessage(`未找到有效的邮箱配置（${errorCount} 行格式错误）`, 'error');
         return;
     }
-    
+
     // 保存到服务器
     try {
         const response = await fetch(`${SUPABASE_API_BASE}/mailboxes/batch`, {
@@ -446,18 +446,18 @@ window.parseMailboxInput = async function() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ mailboxes: newMailboxes })
         });
-        
-            const result = await response.json();
-            
-            if (result.success) {
-                // 更新本地状态
-                AppState.mailboxes = [...AppState.mailboxes, ...result.data];
-                mailboxListManager.updateMailboxes(AppState.mailboxes);
-            
+
+        const result = await response.json();
+
+        if (result.success) {
+            // 更新本地状态
+            AppState.mailboxes = [...AppState.mailboxes, ...result.data];
+            mailboxListManager.updateMailboxes(AppState.mailboxes);
+
             const message = `成功添加 ${result.added} 个邮箱` +
-                          (result.skipped > 0 ? `，跳过 ${result.skipped} 个重复邮箱` : '') +
-                          (errorCount > 0 ? `，${errorCount} 个格式错误` : '');
-            
+                (result.skipped > 0 ? `，跳过 ${result.skipped} 个重复邮箱` : '') +
+                (errorCount > 0 ? `，${errorCount} 个格式错误` : '');
+
             setStatusMessage(message, 'success');
 
             const newIds = (saveResult && saveResult.data ? saveResult.data : [])
@@ -479,57 +479,57 @@ window.parseMailboxInput = async function() {
 /**
  * 导出所有邮箱数据
  */
-window.exportMailboxes = function() {
+window.exportMailboxes = function () {
     if (AppState.mailboxes.length === 0) {
         setStatusMessage('没有可导出的邮箱数据', 'error');
         return;
     }
-    
+
     const separator = document.getElementById('separatorInput').value || '----';
-    
+
     // 生成导出内容
     const exportContent = AppState.mailboxes.map(mailbox => {
         return `${mailbox.email}${separator}${mailbox.password}${separator}${mailbox.client_id}${separator}${mailbox.refresh_token}`;
     }).join('\n');
-    
+
     // 创建Blob对象
     const blob = new Blob([exportContent], { type: 'text/plain;charset=utf-8' });
-    
+
     // 创建下载链接
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    
+
     // 生成文件名（包含时间戳）
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     link.download = `mailboxes_export_${timestamp}.txt`;
-    
+
     // 触发下载
     document.body.appendChild(link);
     link.click();
-    
+
     // 清理
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    
+
     setStatusMessage(`成功导出 ${AppState.mailboxes.length} 个邮箱`, 'success');
 };
 
 /**
  * 导出选中的邮箱
  */
-window.exportSelectedMailbox = function() {
+window.exportSelectedMailbox = function () {
     if (AppState.selectedMailboxIndex === -1) {
         setStatusMessage('请先选择一个邮箱', 'error');
         return;
     }
-    
+
     const mailbox = AppState.mailboxes[AppState.selectedMailboxIndex];
     const separator = document.getElementById('separatorInput').value || '----';
-    
+
     // 生成导出内容
     const exportContent = `${mailbox.email}${separator}${mailbox.password}${separator}${mailbox.client_id}${separator}${mailbox.refresh_token}`;
-    
+
     // 复制到剪贴板
     navigator.clipboard.writeText(exportContent).then(() => {
         setStatusMessage(`已复制邮箱 ${mailbox.email} 的完整信息到剪贴板`, 'success');
@@ -541,14 +541,14 @@ window.exportSelectedMailbox = function() {
         textarea.style.opacity = '0';
         document.body.appendChild(textarea);
         textarea.select();
-        
+
         try {
             document.execCommand('copy');
             setStatusMessage(`已复制邮箱 ${mailbox.email} 的完整信息到剪贴板`, 'success');
         } catch (err) {
             setStatusMessage('复制失败，请手动复制', 'error');
         }
-        
+
         document.body.removeChild(textarea);
     });
 };
@@ -559,24 +559,24 @@ window.exportSelectedMailbox = function() {
 async function deleteMailbox(index) {
     const mailbox = AppState.mailboxes[index];
     if (!mailbox) return;
-    
+
     try {
         if (mailbox.id) {
             await fetch(`${SUPABASE_API_BASE}/mailboxes/${mailbox.id}`, {
                 method: 'DELETE'
             });
         }
-        
+
         AppState.mailboxes.splice(index, 1);
         mailboxListManager.removeMailbox(index);
-        
+
         if (index === AppState.selectedMailboxIndex) {
             AppState.selectedMailboxIndex = -1;
             clearEmailDisplay();
         } else if (index < AppState.selectedMailboxIndex) {
             AppState.selectedMailboxIndex--;
         }
-        
+
         setStatusMessage('邮箱已删除', 'success');
     } catch (error) {
         setStatusMessage(`删除失败: ${error.message}`, 'error');
@@ -586,7 +586,7 @@ async function deleteMailbox(index) {
 /**
  * 批量删除选中的邮箱
  */
-window.bulkDeleteMailboxes = async function() {
+window.bulkDeleteMailboxes = async function () {
     const selected = mailboxListManager.getBatchSelectedMailboxes();
     if (!selected || selected.length === 0) {
         setStatusMessage('请先勾选要删除的邮箱', 'error');
@@ -631,7 +631,13 @@ window.bulkDeleteMailboxes = async function() {
  * 加载邮件列表 - 使用防抖优化
  * 重构版本：消除代码重复，使用统一工具函数
  */
-const loadEmailListInternal = debounce(async function() {
+const loadEmailListInternal = debounce(async function () {
+    // 检查是否选择了邮箱
+    if (AppState.selectedMailboxIndex === -1) {
+        setStatusMessage('请先选择一个邮箱', 'error');
+        return;
+    }
+
     const folder = document.getElementById('mailboxFolderList').value;
     setStatusMessage(`正在加载${folder === 'INBOX' ? '收件箱' : '垃圾箱'}邮件...`, 'loading');
 
@@ -658,21 +664,21 @@ const loadEmailListInternal = debounce(async function() {
  */
 function displaySelectedEmail(email) {
     if (!email) return;
-    
+
     // 显示邮件头部
     document.getElementById('emailFrom').textContent = `发件人: ${email.from || email.send || 'Unknown'}`;
     document.getElementById('emailSubject').textContent = email.subject || '无主题';
     document.getElementById('emailDate').textContent = formatDate(email.date || email.timestamp);
     document.getElementById('emailHeader').style.display = 'block';
-    
+
     // 显示原始数据
     document.getElementById('rawData').textContent = JSON.stringify(email, null, 2);
-    
+
     // 显示加载状态
     document.getElementById('loadingMessage').style.display = 'block';
     document.getElementById('emailFrame').style.display = 'none';
     document.getElementById('emptyState').style.display = 'none';
-    
+
     // 显示邮件内容
     if (email.html) {
         displayEmailContent(email.html);
@@ -685,7 +691,7 @@ function displaySelectedEmail(email) {
         document.getElementById('loadingMessage').style.display = 'none';
         document.getElementById('emptyState').style.display = 'block';
     }
-    
+
     // 切换到邮件内容标签页
     switchTab('emailTab');
 }
@@ -696,11 +702,11 @@ function displaySelectedEmail(email) {
 function displayEmailContent(html) {
     const iframe = document.getElementById('emailFrame');
     iframe.style.display = 'block';
-    
+
     iframe.contentWindow.document.open();
     iframe.contentWindow.document.write(html);
     iframe.contentWindow.document.close();
-    
+
     document.getElementById('loadingMessage').style.display = 'none';
     setStatusMessage('邮件加载成功', 'success');
 }
@@ -711,7 +717,7 @@ function displayEmailContent(html) {
 function displayEmailText(text) {
     const iframe = document.getElementById('emailFrame');
     iframe.style.display = 'block';
-    
+
     const htmlContent = `
         <html>
         <head>
@@ -723,11 +729,11 @@ function displayEmailText(text) {
         <body><pre>${escapeHtml(text)}</pre></body>
         </html>
     `;
-    
+
     iframe.contentWindow.document.open();
     iframe.contentWindow.document.write(htmlContent);
     iframe.contentWindow.document.close();
-    
+
     document.getElementById('loadingMessage').style.display = 'none';
     setStatusMessage('邮件加载成功', 'success');
 }
@@ -735,7 +741,7 @@ function displayEmailText(text) {
 /**
  * 清除邮件显示
  */
-window.clearEmailDisplay = function() {
+window.clearEmailDisplay = function () {
     document.getElementById('emailHeader').style.display = 'none';
     document.getElementById('loadingMessage').style.display = 'none';
     document.getElementById('emailFrame').style.display = 'none';
@@ -748,7 +754,7 @@ window.clearEmailDisplay = function() {
 /**
  * 切换批量删除模式
  */
-window.toggleBulkDeleteMode = function() {
+window.toggleBulkDeleteMode = function () {
     AppState.bulkDeleteMode = !AppState.bulkDeleteMode;
     mailboxListManager.setBulkMode(AppState.bulkDeleteMode);
 
@@ -770,7 +776,7 @@ window.toggleBulkDeleteMode = function() {
 /**
  * 全选/全不选
  */
-window.bulkToggleSelectAll = function() {
+window.bulkToggleSelectAll = function () {
     const total = mailboxListManager.getMailboxes().length;
     const selected = mailboxListManager.getBatchSelectedCount();
     if (total === 0) {
@@ -789,7 +795,7 @@ window.bulkToggleSelectAll = function() {
 /**
  * 清空选择
  */
-window.bulkClearSelection = function() {
+window.bulkClearSelection = function () {
     mailboxListManager.clearBatchSelection();
     setStatusMessage('已清空选择', 'info');
 };
@@ -797,10 +803,10 @@ window.bulkClearSelection = function() {
 /**
  * 切换标签页
  */
-window.switchTab = function(tabId) {
+window.switchTab = function (tabId) {
     document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
     document.querySelectorAll('.email-container').forEach(content => content.style.display = 'none');
-    
+
     document.querySelector(`.tab[onclick*="${tabId}"]`).classList.add('active');
     document.getElementById(tabId).style.display = 'block';
 };
@@ -808,11 +814,11 @@ window.switchTab = function(tabId) {
 /**
  * 设置状态消息
  */
-window.setStatusMessage = function(message, type = 'info') {
+window.setStatusMessage = function (message, type = 'info') {
     const statusElement = document.getElementById('statusMessage');
     statusElement.textContent = message;
     statusElement.className = 'status-message ' + type;
-    
+
     if (type === 'success' || type === 'error') {
         setTimeout(() => {
             if (statusElement.textContent === message) {
@@ -825,7 +831,7 @@ window.setStatusMessage = function(message, type = 'info') {
 
 // ⚠️ API 设置已移至后端环境变量，前端不再需要 saveApiSettings 函数
 // 保留空函数以避免 HTML onclick 报错
-window.saveApiSettings = function() {
+window.saveApiSettings = function () {
     setStatusMessage('API 配置已迁移至后端环境变量，请在 Vercel 项目设置中配置', 'info');
 };
 
@@ -847,7 +853,7 @@ function populateCommodities(lib) {
     });
 }
 
-window.onPurchaseLibraryChange = function() {
+window.onPurchaseLibraryChange = function () {
     const lib = document.getElementById('purchaseLibrary').value;
     localStorage.setItem('purchaseLibrary', lib);
     populateCommodities(lib);
@@ -856,24 +862,24 @@ window.onPurchaseLibraryChange = function() {
 // ==================== 采购相关功能 ====================
 
 // 查询库存
-window.checkStock = async function() {
+window.checkStock = async function () {
     const commodityId = document.getElementById('commodityId').value;
     const stockDisplay = document.getElementById('stockDisplay');
-    
+
     stockDisplay.innerHTML = '正在查询库存...';
     stockDisplay.style.color = '#3498db';
     setStatusMessage('正在查询库存...', 'loading');
-    
+
     try {
         const lib = document.getElementById('purchaseLibrary').value || '1';
         const response = await fetch(`${API_CONFIG.BASE_URL}/proxy/stock?commodity_id=${commodityId}&library=${lib}`, {
             method: 'GET',
             headers: { 'Accept': 'application/json' }
         });
-        
+
         const data = await response.json();
         document.getElementById('rawData').textContent = JSON.stringify(data, null, 2);
-        
+
         if (data && data.code === 200 && data.data) {
             const stockNum = data.data.stock || 0;
             const productName = data.data.name || '未知';
@@ -905,7 +911,7 @@ window.checkStock = async function() {
 };
 
 // 更新库存显示
-window.updateStockDisplay = function() {
+window.updateStockDisplay = function () {
     const stockDisplay = document.getElementById('stockDisplay');
     stockDisplay.innerHTML = '点击"查询库存"获取当前库存信息';
     stockDisplay.style.color = '#3498db';
@@ -913,7 +919,7 @@ window.updateStockDisplay = function() {
 
 // 查询余额
 // ⚠️ 安全改进：API 凭证已移至后端，前端无需发送
-window.checkBalance = async function() {
+window.checkBalance = async function () {
     const balanceDisplay = document.getElementById('balanceDisplay');
 
     balanceDisplay.innerHTML = '正在查询余额...';
@@ -926,10 +932,10 @@ window.checkBalance = async function() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ library: lib })  // 不再发送 app_id 和 app_key
         });
-        
+
         const data = await response.json();
         document.getElementById('rawData').textContent = JSON.stringify(data, null, 2);
-        
+
         if (data.code === 200 && data.data) {
             // 防止 XSS：使用 textContent
             const username = data.data.username || '未知用户';
@@ -951,7 +957,7 @@ window.checkBalance = async function() {
 
 // 购买邮箱
 // ⚠️ 安全改进：API 凭证已移至后端，前端无需发送
-window.purchaseEmails = async function() {
+window.purchaseEmails = async function () {
     const commodityId = document.getElementById('commodityId').value;
     const num = parseInt(document.getElementById('purchaseNum').value);
 
@@ -974,16 +980,16 @@ window.purchaseEmails = async function() {
                 // 不再发送 app_id 和 app_key
             })
         });
-        
+
         const data = await response.json();
         document.getElementById('rawData').textContent = JSON.stringify(data, null, 2);
-        
+
         if (data.code === 200 && data.data && data.data.cards) {
             const cards = data.data.cards;
             const newMailboxes = [];
             let successCount = 0;
             let errorCount = 0;
-            
+
             for (const card of cards) {
                 try {
                     const parts = card.split('----');
@@ -995,7 +1001,7 @@ window.purchaseEmails = async function() {
                             refresh_token: parts[3],
                             source: 'purchase'
                         };
-                        
+
                         const exists = AppState.mailboxes.some(m => m.email.toLowerCase() === parts[0].toLowerCase());
                         if (!exists) {
                             AppState.mailboxes.push(mailboxObj);
@@ -1009,9 +1015,9 @@ window.purchaseEmails = async function() {
                     errorCount++;
                 }
             }
-            
+
             mailboxListManager.updateMailboxes(AppState.mailboxes);
-            
+
             // 保存到服务器
             if (newMailboxes.length > 0) {
                 try {
@@ -1036,12 +1042,12 @@ window.purchaseEmails = async function() {
                     console.error('保存到服务器失败:', e);
                 }
             }
-            
+
             const totalPrice = data.data.total_price || '未知';
             const message = `成功购买 ${successCount} 个邮箱` +
-                           (errorCount > 0 ? `，${errorCount} 个解析失败` : '') +
-                           `。订单号: ${data.data.trade_no || '未知'}，总价: ¥${totalPrice}`;
-            
+                (errorCount > 0 ? `，${errorCount} 个解析失败` : '') +
+                `。订单号: ${data.data.trade_no || '未知'}，总价: ¥${totalPrice}`;
+
             setStatusMessage(message, 'success');
         } else {
             const errorMsg = data.msg || '购买失败';
@@ -1078,7 +1084,7 @@ async function validatePurchasedMailboxes(ids = []) {
 /**
  * 手动触发：检测数据库中所有邮箱的有效性（所有来源）
  */
-window.validateAllMailboxes = async function() {
+window.validateAllMailboxes = async function () {
     setStatusMessage('正在检测所有邮箱有效性...', 'loading');
     try {
         const response = await fetch(`${SUPABASE_API_BASE}/mailboxes/validate-all`, {
@@ -1102,7 +1108,13 @@ window.validateAllMailboxes = async function() {
 };
 
 // 清空收件箱和垃圾箱 - 使用防抖避免误操作
-window.clearInbox = debounce(async function() {
+window.clearInbox = debounce(async function () {
+    // 检查是否选择了邮箱
+    if (AppState.selectedMailboxIndex === -1) {
+        setStatusMessage('请先选择一个邮箱', 'error');
+        return;
+    }
+
     if (!confirm('确定要清空所选邮箱的收件箱吗？此操作不可恢复！')) {
         return;
     }
@@ -1124,7 +1136,13 @@ window.clearInbox = debounce(async function() {
     }
 }, 1000);
 
-window.clearJunk = debounce(async function() {
+window.clearJunk = debounce(async function () {
+    // 检查是否选择了邮箱
+    if (AppState.selectedMailboxIndex === -1) {
+        setStatusMessage('请先选择一个邮箱', 'error');
+        return;
+    }
+
     if (!confirm('确定要清空所选邮箱的垃圾箱吗？此操作不可恢复！')) {
         return;
     }
@@ -1147,7 +1165,7 @@ window.clearJunk = debounce(async function() {
 }, 1000);
 
 // 获取最新邮件
-window.fetchEmail = async function() {
+window.fetchEmail = async function () {
     if (AppState.selectedMailboxIndex === -1) {
         setStatusMessage('请先选择一个邮箱', 'error');
         return;
@@ -1199,7 +1217,7 @@ window.fetchEmail = async function() {
 /**
  * 切换移动端视图
  */
-window.switchMobileView = function(target) {
+window.switchMobileView = function (target) {
     // 更新导航按钮状态
     const navButtons = document.querySelectorAll('.mobile-nav-btn');
     navButtons.forEach(btn => {
@@ -1209,19 +1227,19 @@ window.switchMobileView = function(target) {
             btn.classList.remove('active');
         }
     });
-    
+
     // 切换显示区域
     const sidebar = document.querySelector('.sidebar');
     const emailSidebar = document.querySelector('.email-sidebar');
     const mainContent = document.querySelector('.main-content');
-    
+
     // 移除所有active类
     sidebar.classList.remove('active');
     emailSidebar.classList.remove('active');
     mainContent.classList.remove('active');
-    
+
     // 添加active到目标区域
-    switch(target) {
+    switch (target) {
         case 'sidebar':
             sidebar.classList.add('active');
             break;
@@ -1253,7 +1271,7 @@ function initMobileView() {
         const sidebar = document.querySelector('.sidebar');
         const emailSidebar = document.querySelector('.email-sidebar');
         const mainContent = document.querySelector('.main-content');
-        
+
         sidebar.classList.add('active');
         emailSidebar.classList.add('active');
         mainContent.classList.add('active');
@@ -1272,8 +1290,8 @@ window.addEventListener('resize', debounce(() => {
  */
 const originalMailboxSelect = mailboxListManager ? mailboxListManager.onSelect : null;
 if (isMobileDevice() && mailboxListManager) {
-    mailboxListManager.onSelect = function(callback) {
-        const wrappedCallback = async function(...args) {
+    mailboxListManager.onSelect = function (callback) {
+        const wrappedCallback = async function (...args) {
             await callback(...args);
             // 切换到邮件列表视图
             if (isMobileDevice()) {

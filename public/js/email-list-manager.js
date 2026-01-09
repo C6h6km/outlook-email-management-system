@@ -11,7 +11,7 @@ export class EmailListManager {
         this.selectedIndex = -1;
         this.onSelectCallback = null;
     }
-    
+
     /**
      * 渲染单个邮件项
      */
@@ -19,34 +19,34 @@ export class EmailListManager {
         const item = document.createElement('li');
         item.className = 'email-item' + (index === this.selectedIndex ? ' selected' : '');
         item.dataset.index = index;
-        
+
         // 点击事件
         item.onclick = () => this.selectEmail(index);
-        
+
         // 主题
         const subject = document.createElement('div');
         subject.className = 'email-item-subject';
         subject.textContent = email.subject || '无主题';
         subject.title = email.subject || '无主题';
-        
+
         // 发件人
         const from = document.createElement('div');
         from.className = 'email-item-from';
         from.textContent = `发件人: ${email.from || email.send || 'Unknown'}`;
         from.title = email.from || email.send || 'Unknown';
-        
+
         // 日期
         const date = document.createElement('div');
         date.className = 'email-item-date';
         date.textContent = formatDate(email.date || email.timestamp);
-        
+
         item.appendChild(subject);
         item.appendChild(from);
         item.appendChild(date);
-        
+
         return item;
     }
-    
+
     /**
      * 使用HTML模板渲染（性能更好的备选方案）
      */
@@ -55,37 +55,37 @@ export class EmailListManager {
         item.className = 'email-item' + (index === this.selectedIndex ? ' selected' : '');
         item.dataset.index = index;
         item.onclick = () => this.selectEmail(index);
-        
+
         const subject = escapeHtml(email.subject || '无主题');
         const from = escapeHtml(email.from || email.send || 'Unknown');
         const dateStr = formatDate(email.date || email.timestamp);
-        
+
         item.innerHTML = `
             <div class="email-item-subject" title="${subject}">${subject}</div>
             <div class="email-item-from" title="${from}">发件人: ${from}</div>
             <div class="email-item-date">${dateStr}</div>
         `;
-        
+
         return item;
     }
-    
+
     /**
      * 选择邮件
      */
     selectEmail(index) {
         if (index === this.selectedIndex) return;
-        
+
         this.selectedIndex = index;
-        
+
         // 重新渲染以更新选中状态
         this.render();
-        
+
         // 触发回调
         if (this.onSelectCallback && this.emailData[index]) {
             this.onSelectCallback(this.emailData[index], index);
         }
     }
-    
+
     /**
      * 更新邮件数据
      */
@@ -94,36 +94,36 @@ export class EmailListManager {
         this.selectedIndex = -1;
         this.render();
     }
-    
+
     /**
      * 渲染邮件列表（使用文档片段优化）
      */
     render() {
         if (!this.container) return;
-        
+
         // 如果没有邮件，显示空状态
         if (this.emailData.length === 0) {
             this.container.innerHTML = `
-                <div class="empty-state" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;">
+                <div class="empty-state">
                     <p>没有找到邮件</p>
                 </div>
             `;
             return;
         }
-        
+
         // 使用文档片段批量创建DOM
         const fragment = document.createDocumentFragment();
-        
+
         this.emailData.forEach((email, index) => {
             const item = this.renderEmailItem(email, index);
             fragment.appendChild(item);
         });
-        
+
         // 一次性更新DOM
         this.container.innerHTML = '';
         this.container.appendChild(fragment);
     }
-    
+
     /**
      * 添加邮件
      */
@@ -131,11 +131,11 @@ export class EmailListManager {
         if (!Array.isArray(emails)) {
             emails = [emails];
         }
-        
+
         this.emailData = [...this.emailData, ...emails];
         this.render();
     }
-    
+
     /**
      * 清空邮件列表
      */
@@ -144,21 +144,21 @@ export class EmailListManager {
         this.selectedIndex = -1;
         this.render();
     }
-    
+
     /**
      * 获取选中的邮件
      */
     getSelectedEmail() {
         return this.emailData[this.selectedIndex] || null;
     }
-    
+
     /**
      * 设置选择回调
      */
     onSelect(callback) {
         this.onSelectCallback = callback;
     }
-    
+
     /**
      * 滚动到指定邮件
      */
@@ -170,14 +170,14 @@ export class EmailListManager {
             }
         }
     }
-    
+
     /**
      * 获取所有邮件数据
      */
     getEmails() {
         return this.emailData;
     }
-    
+
     /**
      * 排序邮件
      */
@@ -185,7 +185,7 @@ export class EmailListManager {
         this.emailData.sort(compareFn);
         this.render();
     }
-    
+
     /**
      * 按日期排序（最新的在前）
      */
@@ -196,7 +196,7 @@ export class EmailListManager {
             return dateB - dateA;
         });
     }
-    
+
     /**
      * 销毁
      */
@@ -204,7 +204,7 @@ export class EmailListManager {
         this.emailData = [];
         this.selectedIndex = -1;
         this.onSelectCallback = null;
-        
+
         if (this.container) {
             this.container.innerHTML = '';
         }
@@ -224,7 +224,7 @@ export class MailboxListManager {
         this.batchSelection = new Set();
         this.bulkMode = false;
     }
-    
+
     /**
      * 更新邮箱列表
      */
@@ -234,36 +234,36 @@ export class MailboxListManager {
         this.selectedIndex = -1;
         this.render();
     }
-    
+
     /**
      * 渲染邮箱列表（使用文档片段优化）
      */
     render() {
         if (!this.container) return;
-        
+
         // 如果没有邮箱，显示空状态
         if (this.mailboxes.length === 0) {
             this.container.innerHTML = `
-                <div class="empty-state" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;">
+                <div class="empty-state">
                     <p>没有邮箱，请导入或添加</p>
                 </div>
             `;
             return;
         }
-        
+
         // 使用文档片段批量创建DOM
         const fragment = document.createDocumentFragment();
-        
+
         this.mailboxes.forEach((mailbox, index) => {
             const item = this.createMailboxItem(mailbox, index);
             fragment.appendChild(item);
         });
-        
+
         // 一次性更新DOM
         this.container.innerHTML = '';
         this.container.appendChild(fragment);
     }
-    
+
     /**
      * 创建单个邮箱项
      */
@@ -274,7 +274,7 @@ export class MailboxListManager {
         item.className = 'mailbox-item' +
             (index === this.selectedIndex ? ' selected' : '') +
             (isBatchSelected ? ' selected' : '');
-        
+
         // 单击行为：批量模式下切换选中；正常模式下复制
         item.onclick = async (e) => {
             if (e.target.classList.contains('delete-mailbox') || e.target.classList.contains('mailbox-select')) return;
@@ -291,13 +291,13 @@ export class MailboxListManager {
                 window.setStatusMessage?.('复制失败，请手动复制', 'error');
             }
         };
-        
+
         // 双击选择邮箱
         item.ondblclick = (e) => {
             if (e.target.classList.contains('delete-mailbox')) return;
             this.selectMailbox(index);
         };
-        
+
         // 选择复选框（仅批量模式显示）
         if (this.bulkMode) {
             const selectCheckbox = document.createElement('input');
@@ -317,7 +317,7 @@ export class MailboxListManager {
         emailDiv.className = 'mailbox-email';
         emailDiv.textContent = mailbox.email;
         emailDiv.title = mailbox.email;
-        
+
         // 删除按钮
         const deleteButton = document.createElement('button');
         deleteButton.className = 'delete-mailbox';
@@ -327,35 +327,35 @@ export class MailboxListManager {
             e.stopPropagation();
             this.deleteMailbox(index);
         };
-        
+
         item.appendChild(emailDiv);
         item.appendChild(deleteButton);
-        
+
         return item;
     }
-    
+
     /**
      * 选择邮箱
      */
     selectMailbox(index) {
         if (index === this.selectedIndex) return;
-        
+
         this.selectedIndex = index;
         this.render();
-        
+
         // 触发回调
         if (this.onSelectCallback && this.mailboxes[index]) {
             this.onSelectCallback(this.mailboxes[index], index);
         }
     }
-    
+
     /**
      * 删除邮箱
      */
     deleteMailbox(index) {
         const mailbox = this.mailboxes[index];
         if (!mailbox) return;
-        
+
         if (confirm(`确定要删除邮箱 ${mailbox.email} 吗？`)) {
             // 触发删除回调
             if (this.onDeleteCallback) {
@@ -363,7 +363,7 @@ export class MailboxListManager {
             }
         }
     }
-    
+
     /**
      * 移除邮箱（内部方法，由外部调用后更新）
      */
@@ -376,17 +376,17 @@ export class MailboxListManager {
             const key = mailbox.id || mailbox.email;
             this.batchSelection.delete(key);
         }
-        
+
         // 调整选中索引
         if (index === this.selectedIndex) {
             this.selectedIndex = -1;
         } else if (index < this.selectedIndex) {
             this.selectedIndex--;
         }
-        
+
         this.render();
     }
-    
+
     /**
      * 添加邮箱
      */
@@ -394,25 +394,25 @@ export class MailboxListManager {
         if (!Array.isArray(mailboxes)) {
             mailboxes = [mailboxes];
         }
-        
+
         this.mailboxes = [...this.mailboxes, ...mailboxes];
         this.render();
     }
-    
+
     /**
      * 获取选中的邮箱
      */
     getSelectedMailbox() {
         return this.mailboxes[this.selectedIndex] || null;
     }
-    
+
     /**
      * 获取选中的索引
      */
     getSelectedIndex() {
         return this.selectedIndex;
     }
-    
+
     /**
      * 获取所有邮箱
      */
@@ -478,14 +478,14 @@ export class MailboxListManager {
         this.batchSelection.clear();
         this.render();
     }
-    
+
     /**
      * 设置选择回调
      */
     onSelect(callback) {
         this.onSelectCallback = callback;
     }
-    
+
     /**
      * 设置删除回调
      */
