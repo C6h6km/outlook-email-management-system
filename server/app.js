@@ -147,22 +147,14 @@ const limiter = rateLimit({
 // 对 API 路由应用速率限制
 app.use('/api', limiter);
 
-// 禁用直接访问 index-optimized.html（仅根路径提供优化版）
-// 必须放在静态文件中间件之前，以免被 public 目录命中
-app.get('/index-optimized.html', (req, res) => {
-    res.status(404).send('Not Found');
-});
-
 // 静态文件服务（不自动响应根目录）
 app.use(express.static('public', { index: false }));
 
-// 前端入口路由：默认使用优化版页面，旧版移到 /old
+// 前端入口路由：使用优化版页面
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/index-optimized.html'));
-});
-app.get('/old', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
 });
+
 
 // ==================== 路由注册 ====================
 
