@@ -660,11 +660,16 @@
     .email-viewer {
         flex: 1;
         min-height: 0;
-        height: calc(100vh - var(--mobile-header-height) - var(--mobile-nav-height) - 80px);
-        height: calc(100dvh - var(--mobile-header-height) - var(--mobile-nav-height) - 80px);
+        height: calc(100vh - var(--mobile-header-height) - var(--mobile-nav-height) - 60px);
+        height: calc(100dvh - var(--mobile-header-height) - var(--mobile-nav-height) - 60px);
         background: white;
         overflow: auto;
         -webkit-overflow-scrolling: touch;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        display: block !important;
+        position: relative;
     }
 
     .email-viewer iframe {
@@ -673,6 +678,14 @@
         min-height: calc(100vh - var(--mobile-header-height) - var(--mobile-nav-height) - 120px);
         min-height: calc(100dvh - var(--mobile-header-height) - var(--mobile-nav-height) - 120px);
         border: none;
+        margin: 0;
+        padding: 0;
+        display: block;
+    }
+
+    /* 移动端隐藏tabs标签页 */
+    .tabs {
+        display: none !important;
     }
 
     /* 邮件容器撑满高度 */
@@ -684,14 +697,17 @@
         display: flex;
         flex-direction: column;
         padding-bottom: calc(var(--mobile-nav-height) + var(--mobile-safe-bottom));
+        margin: 0;
+        gap: 0;
     }
 
     /* 邮件头部精简 */
     .email-header {
-        padding: var(--mobile-spacing-md);
-        background: white;
-        border-bottom: 1px solid #e5e7eb;
+        padding: var(--mobile-spacing-sm) var(--mobile-spacing-md);
+        background: #f9fafb;
+        border-bottom: none;
         flex-shrink: 0;
+        margin: 0;
     }
 
     .email-subject {
