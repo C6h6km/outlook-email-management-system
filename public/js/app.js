@@ -35,6 +35,11 @@ const API_CONFIG = {
 
 const SUPABASE_API_BASE = API_CONFIG.BASE_URL;
 
+// 检测是否为移动设备
+function isMobileDevice() {
+    return window.innerWidth <= 768;
+}
+
 // 采购仓库与商品映射
 const LIBRARIES = {
     '1': {
@@ -98,12 +103,22 @@ export async function initApp() {
         emailListManager.onSelect(mainContentBoundary.wrap(async (email, index) => {
             AppState.selectedEmailIndex = index;
             await displaySelectedEmail(email);
+
+            // 移动端自动跳转到邮件内容
+            if (isMobileDevice()) {
+                window.switchMobileView('main-content');
+            }
         }));
 
         mailboxListManager.onSelect(emailListBoundary.wrap(async (mailbox, index) => {
             AppState.selectedMailboxIndex = index;
             setStatusMessage(`已选择邮箱: ${mailbox.email}`, 'success');
             await loadEmailListInternal();
+
+            // 移动端自动跳转到邮件列表
+            if (isMobileDevice()) {
+                window.switchMobileView('email-sidebar');
+            }
         }));
 
         mailboxListManager.onDelete(emailListBoundary.wrap(async (mailbox, index) => {
@@ -1252,12 +1267,6 @@ window.switchMobileView = function (target) {
     }
 };
 
-/**
- * 检测是否为移动设备
- */
-function isMobileDevice() {
-    return window.innerWidth <= 768;
-}
 
 /**
  * 初始化移动端视图

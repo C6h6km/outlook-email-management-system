@@ -275,27 +275,98 @@ export class MailboxListManager {
             (index === this.selectedIndex ? ' selected' : '') +
             (isBatchSelected ? ' selected' : '');
 
-        // 单击行为：批量模式下切换选中；正常模式下复制
-        item.onclick = async (e) => {
+        // 长按检测变量
+        let longPressTimer = null;
+        let isLongPress = false;
+        const LONG_PRESS_DURATION = 500; // 500ms 长按阈值
+
+        // 触摸开始 - 启动长按计时
+        const handleTouchStart = (e) => {
             if (e.target.classList.contains('delete-mailbox') || e.target.classList.contains('mailbox-select')) return;
+
+            isLongPress = false;
+            longPressTimer = setTimeout(async () => {
+                isLongPress = true;
+
+                // 触觉反馈（如果设备支持）
+                if (navigator.vibrate) {
+                    navigator.vibrate(50);
+                }
+
+                // 复制邮箱
+                try {
+                    await navigator.clipboard.writeText(mailbox.email);
+                    this.showCopyToast(mailbox.email);
+                } catch (err) {
+                    // 降级方案
+                    const textarea = document.createElement('textarea');
+                    textarea.value = mailbox.email;
+                    textarea.style.cssText = 'position:fixed;opacity:0;';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    try {
+                        document.execCommand('copy');
+                        this.showCopyToast(mailbox.email);
+                    } catch {
+                        window.setStatusMessage?.('复制失败', 'error');
+                    }
+                    document.body.removeChild(textarea);
+                }
+            }, LONG_PRESS_DURATION);
+        };
+
+        // 触摸结束 - 清除计时器
+        const handleTouchEnd = () => {
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        };
+
+        // 触摸取消/移动 - 取消长按
+        const handleTouchCancel = () => {
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+            isLongPress = false;
+        };
+
+        // 点击行为：批量模式下切换选中；正常模式下选择邮箱
+        item.onclick = (e) => {
+            if (e.target.classList.contains('delete-mailbox') || e.target.classList.contains('mailbox-select')) return;
+
+            // 如果是长按触发的，不执行点击
+            if (isLongPress) {
+                isLongPress = false;
+                return;
+            }
 
             if (this.bulkMode) {
                 this.toggleBatchSelection(mailbox);
                 return;
             }
 
-            try {
-                await navigator.clipboard.writeText(mailbox.email);
-                window.setStatusMessage?.(`已复制: ${mailbox.email}`, 'success');
-            } catch (err) {
-                window.setStatusMessage?.('复制失败，请手动复制', 'error');
-            }
+            // 单击选择邮箱（移动端友好）
+            this.selectMailbox(index);
         };
 
-        // 双击选择邮箱
-        item.ondblclick = (e) => {
+        // 绑定触摸事件（移动端长按复制）
+        item.addEventListener('touchstart', handleTouchStart, { passive: true });
+        item.addEventListener('touchend', handleTouchEnd, { passive: true });
+        item.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+        item.addEventListener('touchmove', handleTouchCancel, { passive: true });
+
+        // 桌面端：双击复制
+        item.ondblclick = async (e) => {
             if (e.target.classList.contains('delete-mailbox')) return;
-            this.selectMailbox(index);
+
+            try {
+                await navigator.clipboard.writeText(mailbox.email);
+                this.showCopyToast(mailbox.email);
+            } catch (err) {
+                window.setStatusMessage?.('复制失败', 'error');
+            }
         };
 
         // 选择复选框（仅批量模式显示）
@@ -316,7 +387,7 @@ export class MailboxListManager {
         const emailDiv = document.createElement('div');
         emailDiv.className = 'mailbox-email';
         emailDiv.textContent = mailbox.email;
-        emailDiv.title = mailbox.email;
+        emailDiv.title = '点击选择 | 长按复制';
 
         // 删除按钮
         const deleteButton = document.createElement('button');
@@ -332,6 +403,29 @@ export class MailboxListManager {
         item.appendChild(deleteButton);
 
         return item;
+    }
+
+    /**
+     * 显示复制成功的Toast提示
+     */
+    showCopyToast(email) {
+        // 移除已有的toast
+        const existingToast = document.querySelector('.copy-toast');
+        if (existingToast) {
+            existingToast.remove();
+        }
+
+        // 创建toast
+        const toast = document.createElement('div');
+        toast.className = 'copy-toast';
+        toast.innerHTML = `<span>✓ 已复制</span><br><small>${email}</small>`;
+        document.body.appendChild(toast);
+
+        // 2秒后移除
+        setTimeout(() => {
+            toast.classList.add('fade-out');
+            setTimeout(() => toast.remove(), 300);
+        }, 1500);
     }
 
     /**

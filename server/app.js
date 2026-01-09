@@ -20,17 +20,21 @@ const app = express();
 // Helmet安全中间件
 app.use(helmet({
     crossOriginEmbedderPolicy: false,
-    contentSecurityPolicy: {
-        useDefaults: true,
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: false,
+    originAgentCluster: false,
+    hsts: false,
+    contentSecurityPolicy: config.isDevelopment ? false : {  // 开发环境完全禁用CSP
+        useDefaults: false,  // 禁用默认值，避免upgrade-insecure-requests
         directives: {
             "default-src": ["'self'"],
             "script-src": ["'self'", "'unsafe-inline'"],
             "script-src-attr": ["'unsafe-inline'"],
             "style-src": ["'self'", "https:", "'unsafe-inline'"],
             "img-src": ["'self'", "data:"],
-            // 移除通配符 "*"，只允许特定域名和本地开发
             "connect-src": ["'self'",
                 `http://localhost:${config.port}`,
+                `http://127.0.0.1:${config.port}`,
                 "https://*.vercel.app",
                 "https://api.1181180.xyz",
                 "https://outlook007.cc",
@@ -42,19 +46,32 @@ app.use(helmet({
 
 // CORS配置（安全加固版本）
 function isOriginAllowed(origin) {
-    // 无 Origin 的请求（服务端调用、curl等）默认拒绝，防止凭证泄露
-    if (!origin) return false;
+    // 无 Origin 的请求（服务端调用、curl等）在开发环境允许，生产环境拒绝
+    if (!origin) {
+        return config.isDevelopment;
+    }
 
     const list = config.corsOrigins || [];
+
+    // 开发环境：允许本地和局域网访问
+    if (config.isDevelopment) {
+        // 允许 localhost 和 127.0.0.1
+        if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+            return true;
+        }
+        // 允许局域网IP（192.168.x.x, 10.x.x.x, 172.16-31.x.x）
+        if (/^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(origin)) {
+            return true;
+        }
+        // 开发环境下如果配置了 * 则允许所有
+        if (list.includes('*')) {
+            return true;
+        }
+    }
 
     // 未配置时默认拒绝（安全优先）
     // 生产环境必须配置 ALLOWED_ORIGINS 环境变量
     if (list.length === 0) {
-        // 仅开发环境允许本地访问
-        if (config.isDevelopment &&
-            (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1'))) {
-            return true;
-        }
         logger.warn('[CORS] 未配置 ALLOWED_ORIGINS，拒绝来源', { origin });
         return false;
     }
@@ -93,12 +110,6 @@ function isOriginAllowed(origin) {
         // 解析失败时采用保守策略：不放行
         logger.warn('[CORS] Origin 解析失败', { origin, error: err.message });
         return false;
-    }
-
-    // 始终允许本地调试（开发环境）
-    if (config.isDevelopment &&
-        (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1'))) {
-        return true;
     }
 
     return false;
