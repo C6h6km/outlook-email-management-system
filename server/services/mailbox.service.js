@@ -46,14 +46,14 @@ class MailboxService {
             releaseLock();
         }
     }
-    
+
     /**
      * 确保数据文件存在
      */
     async ensureDataFile() {
         // 如果使用 Blob 存储，无需本地文件
         if (this.useBlob) return;
-        
+
         try {
             await fs.access(this.dataDir);
         } catch {
@@ -65,7 +65,7 @@ class MailboxService {
                 return; // 跳过，后续读取时会返回空数组
             }
         }
-        
+
         try {
             await fs.access(this.mailboxesFile);
         } catch {
@@ -76,7 +76,7 @@ class MailboxService {
             }
         }
     }
-    
+
     /**
      * 读取邮箱列表
      */
@@ -85,9 +85,9 @@ class MailboxService {
             const data = await readJSONBlob(this.blobKey);
             return Array.isArray(data) ? data : [];
         }
-        
+
         await this.ensureDataFile();
-        
+
         try {
             const content = await fs.readFile(this.mailboxesFile, 'utf8');
             const parsed = JSON.parse(content);
@@ -98,7 +98,7 @@ class MailboxService {
             return [];
         }
     }
-    
+
     /**
      * 写入邮箱列表
      */
@@ -107,9 +107,9 @@ class MailboxService {
             await writeJSONBlob(this.blobKey, mailboxes);
             return;
         }
-        
+
         await this.ensureDataFile();
-        
+
         try {
             await fs.writeFile(this.mailboxesFile, JSON.stringify(mailboxes, null, 2));
         } catch (err) {
@@ -117,7 +117,7 @@ class MailboxService {
             throw new Error('无法保存邮箱数据，请配置 outlook_READ_WRITE_TOKEN 使用 Vercel Blob 存储');
         }
     }
-    
+
     /**
      * 获取所有活跃邮箱
      */
@@ -125,7 +125,7 @@ class MailboxService {
         const mailboxes = await this.readMailboxes();
         return mailboxes.filter(m => m.is_active !== false);
     }
-    
+
     /**
      * 根据ID获取邮箱
      */
@@ -133,7 +133,7 @@ class MailboxService {
         const mailboxes = await this.readMailboxes();
         return mailboxes.find(m => m.id === id);
     }
-    
+
     /**
      * 根据邮箱地址获取邮箱
      */
@@ -141,7 +141,7 @@ class MailboxService {
         const mailboxes = await this.readMailboxes();
         return mailboxes.find(m => m.email === email && m.is_active !== false);
     }
-    
+
     /**
      * 添加单个邮箱
      */
@@ -214,7 +214,7 @@ class MailboxService {
             return mailbox;
         });
     }
-    
+
     /**
      * 批量添加邮箱
      */
@@ -286,7 +286,7 @@ class MailboxService {
             };
         });
     }
-    
+
     /**
      * 更新邮箱
      */
@@ -370,30 +370,30 @@ class MailboxService {
             };
         });
     }
-    
+
     /**
      * 永久删除邮箱（物理删除）
      */
     async permanentlyDeleteMailbox(id) {
         const mailboxes = await this.readMailboxes();
         const index = mailboxes.findIndex(m => m.id === id);
-        
+
         if (index === -1) {
             throw new Error('邮箱不存在');
         }
-        
+
         mailboxes.splice(index, 1);
         await this.writeMailboxes(mailboxes);
-        
+
         return { message: '邮箱永久删除成功' };
     }
-    
+
     /**
      * 获取邮箱统计信息
      */
     async getStatistics() {
         const mailboxes = await this.readMailboxes();
-        
+
         return {
             total: mailboxes.length,
             active: mailboxes.filter(m => m.is_active !== false).length,
@@ -405,46 +405,82 @@ class MailboxService {
      * 按来源校验邮箱，外部 API 返回 500 时视为失效并软删除
      * @param {string[]} ids 可选，仅校验指定ID
      * @param {string|null} source 指定来源（如 'purchase'）；为 null 时校验所有来源
+     * @param {number} concurrency 并发数，默认 10
      */
-    async validateMailboxesBySource(ids = [], source = 'purchase') {
-        const mailboxes = await this.getAllMailboxes();
-        const target = mailboxes.filter(m => {
-            if (m.is_active === false) return false;
-            if (source && m.source !== source) return false;
-            if (ids.length > 0 && !ids.includes(m.id)) return false;
-            return true;
-        });
+    async validateMailboxesBySource(ids = [], source = 'purchase', concurrency = 10) {
+        return this._acquireWriteLock(async () => {
+            const mailboxes = await this.readMailboxes();
+            const activeMailboxes = mailboxes.filter(m => m.is_active !== false);
 
-        let checked = 0;
-        let removed = 0;
-        const removedEmails = [];
-        const errors = [];
+            const target = activeMailboxes.filter(m => {
+                if (source && m.source !== source) return false;
+                if (ids.length > 0 && !ids.includes(m.id)) return false;
+                return true;
+            });
 
-        for (const mailbox of target) {
-            try {
-                await require('./proxy.service').getMailboxEmails(mailbox, 'inbox');
-                checked++;
-            } catch (err) {
-                const status = err.status || (err.message && err.message.includes('HTTP 500') ? 500 : null);
-                if (status === 500) {
-                    await this.deleteMailbox(mailbox.id);
-                    removed++;
-                    removedEmails.push(mailbox.email);
-                } else {
-                    errors.push({ email: mailbox.email, error: err.message });
+            let checked = 0;
+            let removed = 0;
+            const removedEmails = [];
+            const removedIds = [];
+            const errors = [];
+
+            // 并发检测函数
+            const checkMailbox = async (mailbox) => {
+                try {
+                    await require('./proxy.service').getMailboxEmails(mailbox, 'inbox');
+                    return { status: 'valid', mailbox };
+                } catch (err) {
+                    const status = err.status || (err.message && err.message.includes('HTTP 500') ? 500 : null);
+                    if (status === 500) {
+                        return { status: 'invalid', mailbox };
+                    } else {
+                        return { status: 'error', mailbox, error: err.message };
+                    }
+                }
+            };
+
+            // 分批并发处理
+            for (let i = 0; i < target.length; i += concurrency) {
+                const batch = target.slice(i, i + concurrency);
+                const results = await Promise.all(batch.map(checkMailbox));
+
+                for (const result of results) {
+                    if (result.status === 'valid') {
+                        checked++;
+                    } else if (result.status === 'invalid') {
+                        removedIds.push(result.mailbox.id);
+                        removedEmails.push(result.mailbox.email);
+                        removed++;
+                    } else if (result.status === 'error') {
+                        errors.push({ email: result.mailbox.email, error: result.error });
+                    }
                 }
             }
-        }
 
-        const remaining = await this.getAllMailboxes();
+            // 批量软删除所有失效的邮箱
+            if (removedIds.length > 0) {
+                const now = new Date().toISOString();
+                for (const id of removedIds) {
+                    const mailbox = mailboxes.find(m => m.id === id);
+                    if (mailbox) {
+                        mailbox.is_active = false;
+                        mailbox.updated_at = now;
+                    }
+                }
+                await this.writeMailboxes(mailboxes);
+            }
 
-        return {
-            checked,
-            removed,
-            removedEmails,
-            errors,
-            data: remaining,
-        };
+            // 返回剩余的活跃邮箱
+            const remaining = mailboxes.filter(m => m.is_active !== false);
+
+            return {
+                checked,
+                removed,
+                removedEmails,
+                errors,
+                data: remaining,
+            };
+        });
     }
 }
 
