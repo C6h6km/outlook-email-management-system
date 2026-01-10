@@ -475,11 +475,12 @@ window.parseMailboxInput = async function () {
 
             setStatusMessage(message, 'success');
 
-            const newIds = (saveResult && saveResult.data ? saveResult.data : [])
+            // 如果有新添加的邮箱ID，执行校验
+            const newIds = (result.data || [])
                 .map(m => m.id)
                 .filter(Boolean);
-            if (newIds.length > 0) {
-                setStatusMessage('正在校验新购买的邮箱...', 'loading');
+            if (newIds.length > 0 && typeof validatePurchasedMailboxes === 'function') {
+                setStatusMessage('正在校验新添加的邮箱...', 'loading');
                 validatePurchasedMailboxes(newIds);
             }
             document.getElementById('mailboxInput').value = '';
@@ -1294,24 +1295,6 @@ window.addEventListener('resize', debounce(() => {
     initMobileView();
 }, 300));
 
-/**
- * 移动端优化：双击邮箱后自动切换到邮件列表
- */
-const originalMailboxSelect = mailboxListManager ? mailboxListManager.onSelect : null;
-if (isMobileDevice() && mailboxListManager) {
-    mailboxListManager.onSelect = function (callback) {
-        const wrappedCallback = async function (...args) {
-            await callback(...args);
-            // 切换到邮件列表视图
-            if (isMobileDevice()) {
-                switchMobileView('email-sidebar');
-            }
-        };
-        if (originalMailboxSelect) {
-            originalMailboxSelect.call(mailboxListManager, wrappedCallback);
-        }
-    };
-}
 
 // 页面加载时初始化
 if (document.readyState === 'loading') {

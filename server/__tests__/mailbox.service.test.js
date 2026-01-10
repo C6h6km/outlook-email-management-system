@@ -59,29 +59,42 @@ describe('MailboxService', () => {
     });
 
     describe('validateMailbox', () => {
-        test('应该验证邮箱格式', () => {
-            const testCases = [
-                { email: 'test@example.com', valid: true },
-                { email: 'invalid', valid: false },
-                { email: 'no@domain', valid: false },
-                { email: '@nodomain.com', valid: false },
-                { email: 'user@sub.domain.com', valid: true },
+        test('应该验证有效的邮箱格式', async () => {
+            const validEmails = [
+                'test@example.com',
+                'user@sub.domain.com',
             ];
 
-            testCases.forEach(({ email, valid }) => {
+            for (const email of validEmails) {
                 const mailbox = {
                     email,
                     password: 'pass',
                     client_id: 'id',
                     refresh_token: 'token'
                 };
+                // 有效邮箱应该不抛出格式错误
+                await expect(mailboxService.addMailbox(mailbox))
+                    .resolves.toHaveProperty('id');
+            }
+        });
 
-                if (valid) {
-                    expect(() => mailboxService.addMailbox(mailbox)).not.toThrow('邮箱格式无效');
-                } else {
-                    expect(() => mailboxService.addMailbox(mailbox)).rejects.toThrow();
-                }
-            });
+        test('应该拒绝无效的邮箱格式', async () => {
+            const invalidEmails = [
+                'invalid',
+                'no@domain',
+                '@nodomain.com',
+            ];
+
+            for (const email of invalidEmails) {
+                const mailbox = {
+                    email,
+                    password: 'pass',
+                    client_id: 'id',
+                    refresh_token: 'token'
+                };
+                await expect(mailboxService.addMailbox(mailbox))
+                    .rejects.toThrow();
+            }
         });
     });
 });
