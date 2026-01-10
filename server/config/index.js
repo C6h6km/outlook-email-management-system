@@ -47,7 +47,12 @@ const config = {
     },
 
     // 数据库配置（Neon PostgreSQL）
-    databaseUrl: process.env.DATABASE_URL || null,
+    // Vercel + Neon 集成会自动注入 POSTGRES_URL 或其他变量
+    databaseUrl: process.env.DATABASE_URL
+        || process.env.POSTGRES_URL
+        || process.env.POSTGRES_PRISMA_URL
+        || process.env.POSTGRES_URL_NON_POOLING
+        || null,
     // 强制使用旧存储方式（Blob/JSON），用于回滚
     useLegacyStorage: process.env.USE_LEGACY_STORAGE === 'true',
     // Blob 存储配置
