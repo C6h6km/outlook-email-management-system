@@ -17,7 +17,8 @@ lerna-debug.log*
 
 # 数据文件（根据需求决定是否提交）
 data/
-*.json
+# 只排除 data 目录下的 JSON 文件，不排除 package.json
+data/*.json
 
 # 编辑器
 .vscode/*
