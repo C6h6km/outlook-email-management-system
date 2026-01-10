@@ -97,12 +97,18 @@ class MailboxController {
         } catch (error) {
             console.error('批量添加邮箱失败:', error);
 
-            const status = error.message.includes('格式错误') ||
-                error.message.includes('不完整') ? 400 : 500;
+            // 识别验证错误（400）vs 服务器错误（500）
+            const isValidationError =
+                error.message.includes('格式错误') ||
+                error.message.includes('格式无效') ||
+                error.message.includes('不完整') ||
+                error.message.includes('过长');
+
+            const status = isValidationError ? 400 : 500;
 
             res.status(status).json({
                 success: false,
-                error: '批量添加邮箱失败',
+                error: isValidationError ? error.message : '批量添加邮箱失败',
                 details: error.message,
             });
         }

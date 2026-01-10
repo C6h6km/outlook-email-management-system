@@ -315,4 +315,175 @@ describe('MailboxService', () => {
             expect(mailboxes.length).toBe(10);
         });
     });
+
+    // ==================== 批量操作验证测试 ====================
+    describe('批量操作验证', () => {
+        test('应该拒绝超长邮箱地址的批量添加', async () => {
+            const batch = [
+                { email: 'a'.repeat(300) + '@example.com', password: 'p1', client_id: 'c1', refresh_token: 't1' },
+            ];
+
+            await expect(mailboxService.addMailboxesBatch(batch))
+                .rejects.toThrow('邮箱地址过长');
+        });
+
+        test('应该拒绝超长密码的批量添加', async () => {
+            const batch = [
+                { email: 'test@example.com', password: 'p'.repeat(1025), client_id: 'c1', refresh_token: 't1' },
+            ];
+
+            await expect(mailboxService.addMailboxesBatch(batch))
+                .rejects.toThrow('密码过长');
+        });
+
+        test('应该拒绝无效邮箱格式的批量添加', async () => {
+            const batch = [
+                { email: 'invalid-email', password: 'p1', client_id: 'c1', refresh_token: 't1' },
+            ];
+
+            await expect(mailboxService.addMailboxesBatch(batch))
+                .rejects.toThrow('邮箱格式无效');
+        });
+
+        test('应该拒绝空数组的批量添加', async () => {
+            await expect(mailboxService.addMailboxesBatch([]))
+                .rejects.toThrow('邮箱数据格式错误');
+        });
+
+        test('应该拒绝非数组的批量添加', async () => {
+            await expect(mailboxService.addMailboxesBatch(null))
+                .rejects.toThrow('邮箱数据格式错误');
+        });
+
+        test('应该拒绝不完整数据的批量添加', async () => {
+            const batch = [
+                { email: 'test@example.com' }, // 缺少其他字段
+            ];
+
+            await expect(mailboxService.addMailboxesBatch(batch))
+                .rejects.toThrow('邮箱配置信息不完整');
+        });
+    });
+
+    // ==================== 边界条件测试 ====================
+    describe('边界条件', () => {
+        test('应该正确处理特殊字符邮箱', async () => {
+            const specialMailbox = {
+                email: 'test+special.chars@sub.example.com',
+                password: 'pass',
+                client_id: 'id',
+                refresh_token: 'token'
+            };
+
+            const result = await mailboxService.addMailbox(specialMailbox);
+            expect(result.email).toBe(specialMailbox.email);
+        });
+
+        test('应该正确处理最大长度字段', async () => {
+            const maxMailbox = {
+                email: 'a'.repeat(240) + '@example.com', // 接近255限制
+                password: 'p'.repeat(1024), // 最大1024
+                client_id: 'c'.repeat(255), // 最大255
+                refresh_token: 't'.repeat(2048) // 最大2048
+            };
+
+            const result = await mailboxService.addMailbox(maxMailbox);
+            expect(result).toHaveProperty('id');
+        });
+
+        test('更新不应更改邮箱地址', async () => {
+            const added = await mailboxService.addMailbox({
+                email: 'original@example.com',
+                password: 'pass',
+                client_id: 'id',
+                refresh_token: 'token'
+            });
+
+            const updated = await mailboxService.updateMailbox(added.id, {
+                password: 'new-pass'
+            });
+
+            expect(updated.email).toBe('original@example.com');
+        });
+
+        test('getAllMailboxes 在无数据时返回空数组', async () => {
+            const result = await mailboxService.getAllMailboxes();
+            expect(Array.isArray(result)).toBe(true);
+            expect(result.length).toBe(0);
+        });
+
+        test('getMailboxByEmail 不存在时返回 null', async () => {
+            const result = await mailboxService.getMailboxByEmail('nonexistent@example.com');
+            expect(result).toBeNull();
+        });
+    });
+
+    // ==================== 永久删除测试 ====================
+    describe('permanentlyDeleteMailbox', () => {
+        test('应该永久删除邮箱', async () => {
+            const added = await mailboxService.addMailbox({
+                email: 'permanent-delete@example.com',
+                password: 'pass',
+                client_id: 'id',
+                refresh_token: 'token'
+            });
+
+            await mailboxService.permanentlyDeleteMailbox(added.id);
+
+            // 确认无法找到
+            const found = await mailboxService.getMailboxById(added.id);
+            expect(found).toBeNull();
+
+            // 确认可以重新添加（因为是永久删除，不是软删除）
+            const reAdded = await mailboxService.addMailbox({
+                email: 'permanent-delete@example.com',
+                password: 'pass',
+                client_id: 'id',
+                refresh_token: 'token'
+            });
+            expect(reAdded.email).toBe('permanent-delete@example.com');
+        });
+    });
+
+    // ==================== 数据转换测试 ====================
+    describe('数据格式', () => {
+        test('返回的邮箱应包含所有必要字段', async () => {
+            const added = await mailboxService.addMailbox({
+                email: 'format-test@example.com',
+                password: 'pass',
+                client_id: 'id',
+                refresh_token: 'token'
+            });
+
+            expect(added).toHaveProperty('id');
+            expect(added).toHaveProperty('email');
+            expect(added).toHaveProperty('password');
+            expect(added).toHaveProperty('client_id');
+            expect(added).toHaveProperty('refresh_token');
+            expect(added).toHaveProperty('is_active');
+            expect(added).toHaveProperty('created_at');
+        });
+
+        test('批量添加返回正确的结构', async () => {
+            const batch = [
+                { email: 'format1@example.com', password: 'p', client_id: 'c', refresh_token: 't' },
+            ];
+
+            const result = await mailboxService.addMailboxesBatch(batch);
+
+            expect(result).toHaveProperty('added');
+            expect(result).toHaveProperty('skipped');
+            expect(result).toHaveProperty('data');
+            expect(result).toHaveProperty('skippedEmails');
+        });
+
+        test('统计信息应包含正确的字段', async () => {
+            const stats = await mailboxService.getStatistics();
+
+            expect(stats).toHaveProperty('total');
+            expect(stats).toHaveProperty('active');
+            expect(stats).toHaveProperty('inactive');
+            expect(typeof stats.total).toBe('number');
+        });
+    });
 });
