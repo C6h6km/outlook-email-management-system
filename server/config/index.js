@@ -46,6 +46,14 @@ const config = {
         password: process.env.EXTERNAL_MAIL_API_PASSWORD || '',
     },
 
+    // 数据库配置（Neon PostgreSQL）
+    databaseUrl: process.env.DATABASE_URL || null,
+    // 强制使用旧存储方式（Blob/JSON），用于回滚
+    useLegacyStorage: process.env.USE_LEGACY_STORAGE === 'true',
+    // Blob 存储配置
+    blobToken: process.env.BLOB_READ_WRITE_TOKEN || process.env.outlook_READ_WRITE_TOKEN || null,
+    blobMailboxesKey: process.env.BLOB_MAILBOXES_KEY || 'mailboxes/mailboxes.json',
+
     // 日志配置
     logLevel: process.env.LOG_LEVEL || 'info',
 

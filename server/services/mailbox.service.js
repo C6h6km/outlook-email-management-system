@@ -1,68 +1,102 @@
 /**
  * 邮箱服务层 - 业务逻辑抽象
+ * 
+ * 存储后端优先级：
+ * 1. 如果 USE_LEGACY_STORAGE=true，使用旧存储（Blob/JSON）
+ * 2. 如果 DATABASE_URL 已配置，使用 PostgreSQL
+ * 3. 否则回退到 Blob/JSON
  */
 
 const fs = require('fs').promises;
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const { eq, and } = require('drizzle-orm');
 const config = require('../config');
 const { readJSONBlob, writeJSONBlob } = require('../utils/blob-store');
+const { getDb, isDatabaseAvailable, schema } = require('../db');
+const { mailboxes } = schema;
 
 class MailboxService {
     constructor() {
         this.dataDir = config.dataDir;
         this.mailboxesFile = config.mailboxesFile;
-        // 在 Blob 中使用固定键存储
-        this.blobKey = process.env.BLOB_MAILBOXES_KEY || 'mailboxes/mailboxes.json';
-        // 优先使用 Vercel 自动注入的环境变量，兼容自定义变量名
-        const blobToken = process.env.BLOB_READ_WRITE_TOKEN || process.env.outlook_READ_WRITE_TOKEN;
-        this.useBlob = !!blobToken; // 有 Token 则启用 Blob
+        this.blobKey = config.blobMailboxesKey || 'mailboxes/mailboxes.json';
 
-        // 并发控制：防止同时读写导致数据覆盖
+        // 确定存储模式
+        this._determineStorageMode();
+
+        // 并发控制（仅用于旧存储模式）
         this.writeLock = Promise.resolve();
     }
 
     /**
-     * 获取写锁，确保写操作串行执行
+     * 确定使用哪种存储模式
+     * @private
+     */
+    _determineStorageMode() {
+        // 强制使用旧存储
+        if (config.useLegacyStorage) {
+            this.storageMode = config.blobToken ? 'blob' : 'file';
+            console.log(`[MailboxService] Using legacy storage mode: ${this.storageMode}`);
+            return;
+        }
+
+        // 优先使用 PostgreSQL
+        if (config.databaseUrl && isDatabaseAvailable()) {
+            this.storageMode = 'postgres';
+            console.log('[MailboxService] Using PostgreSQL storage');
+            return;
+        }
+
+        // 回退到 Blob 或本地文件
+        this.storageMode = config.blobToken ? 'blob' : 'file';
+        console.log(`[MailboxService] Falling back to ${this.storageMode} storage`);
+    }
+
+    /**
+     * 检查是否使用 PostgreSQL
+     */
+    isUsingDatabase() {
+        return this.storageMode === 'postgres';
+    }
+
+    // ============================================================
+    // 旧存储模式方法（Blob/JSON）
+    // ============================================================
+
+    /**
+     * 获取写锁，确保写操作串行执行（仅用于旧存储）
      * @private
      */
     async _acquireWriteLock(operation) {
-        // 等待之前的写操作完成
         const previousLock = this.writeLock;
-
-        // 创建新的锁（当前操作完成后释放）
         let releaseLock;
         this.writeLock = new Promise(resolve => {
             releaseLock = resolve;
         });
 
         try {
-            // 等待之前的锁释放
             await previousLock;
-            // 执行当前操作
             return await operation();
         } finally {
-            // 释放当前锁
             releaseLock();
         }
     }
 
     /**
-     * 确保数据文件存在
+     * 确保数据文件存在（仅用于文件模式）
      */
     async ensureDataFile() {
-        // 如果使用 Blob 存储，无需本地文件
-        if (this.useBlob) return;
+        if (this.storageMode !== 'file') return;
 
         try {
             await fs.access(this.dataDir);
         } catch {
-            // 在只读环境无法创建目录时，不抛出错误
             try {
                 await fs.mkdir(this.dataDir, { recursive: true });
             } catch (err) {
-                console.warn('无法创建数据目录，可能在只读环境:', err.message);
-                return; // 跳过，后续读取时会返回空数组
+                console.warn('无法创建数据目录:', err.message);
+                return;
             }
         }
 
@@ -72,111 +106,202 @@ class MailboxService {
             try {
                 await fs.writeFile(this.mailboxesFile, JSON.stringify([]));
             } catch (err) {
-                console.warn('无法创建数据文件，可能在只读环境:', err.message);
+                console.warn('无法创建数据文件:', err.message);
             }
         }
     }
 
     /**
-     * 读取邮箱列表
+     * 读取邮箱列表（旧存储模式）
+     * @private
      */
-    async readMailboxes() {
-        if (this.useBlob) {
+    async _readMailboxesLegacy() {
+        if (this.storageMode === 'blob') {
             const data = await readJSONBlob(this.blobKey);
             return Array.isArray(data) ? data : [];
         }
 
         await this.ensureDataFile();
-
         try {
             const content = await fs.readFile(this.mailboxesFile, 'utf8');
             const parsed = JSON.parse(content);
             return Array.isArray(parsed) ? parsed : [];
         } catch (err) {
-            // 文件不存在或解析失败时返回空数组
-            console.warn('读取邮箱文件失败，返回空数组:', err.message);
+            console.warn('读取邮箱文件失败:', err.message);
             return [];
         }
     }
 
     /**
-     * 写入邮箱列表
+     * 写入邮箱列表（旧存储模式）
+     * @private
      */
-    async writeMailboxes(mailboxes) {
-        if (this.useBlob) {
+    async _writeMailboxesLegacy(mailboxes) {
+        if (this.storageMode === 'blob') {
             await writeJSONBlob(this.blobKey, mailboxes);
             return;
         }
 
         await this.ensureDataFile();
-
         try {
             await fs.writeFile(this.mailboxesFile, JSON.stringify(mailboxes, null, 2));
         } catch (err) {
-            console.error('写入邮箱文件失败（可能在只读环境）:', err.message);
-            throw new Error('无法保存邮箱数据，请配置 outlook_READ_WRITE_TOKEN 使用 Vercel Blob 存储');
+            console.error('写入邮箱文件失败:', err.message);
+            throw new Error('无法保存邮箱数据');
         }
     }
+
+    // ============================================================
+    // 数据转换方法
+    // ============================================================
+
+    /**
+     * 数据库行转换为 JSON 格式
+     * @private
+     */
+    _dbRowToJson(row) {
+        return {
+            id: row.id,
+            email: row.email,
+            password: row.password,
+            client_id: row.clientId,
+            refresh_token: row.refreshToken,
+            is_active: row.isActive,
+            source: row.source,
+            created_at: row.createdAt?.toISOString(),
+            updated_at: row.updatedAt?.toISOString(),
+        };
+    }
+
+    /**
+     * JSON 格式转换为数据库插入值
+     * @private
+     */
+    _jsonToDbValues(data) {
+        return {
+            email: data.email,
+            password: data.password,
+            clientId: data.client_id,
+            refreshToken: data.refresh_token,
+            isActive: data.is_active !== false,
+            source: data.source || 'manual',
+        };
+    }
+
+    // ============================================================
+    // 公共 API 方法
+    // ============================================================
 
     /**
      * 获取所有活跃邮箱
      */
     async getAllMailboxes() {
-        const mailboxes = await this.readMailboxes();
-        return mailboxes.filter(m => m.is_active !== false);
+        if (this.storageMode === 'postgres') {
+            const db = getDb();
+            const rows = await db.select().from(mailboxes).where(eq(mailboxes.isActive, true));
+            return rows.map(row => this._dbRowToJson(row));
+        }
+
+        const data = await this._readMailboxesLegacy();
+        return data.filter(m => m.is_active !== false);
     }
 
     /**
      * 根据ID获取邮箱
      */
     async getMailboxById(id) {
-        const mailboxes = await this.readMailboxes();
-        return mailboxes.find(m => m.id === id);
+        if (this.storageMode === 'postgres') {
+            const db = getDb();
+            const rows = await db.select().from(mailboxes).where(eq(mailboxes.id, id));
+            return rows.length > 0 ? this._dbRowToJson(rows[0]) : null;
+        }
+
+        const data = await this._readMailboxesLegacy();
+        return data.find(m => m.id === id) || null;
     }
 
     /**
      * 根据邮箱地址获取邮箱
      */
     async getMailboxByEmail(email) {
-        const mailboxes = await this.readMailboxes();
-        return mailboxes.find(m => m.email === email && m.is_active !== false);
+        if (this.storageMode === 'postgres') {
+            const db = getDb();
+            const rows = await db.select().from(mailboxes)
+                .where(and(eq(mailboxes.email, email), eq(mailboxes.isActive, true)));
+            return rows.length > 0 ? this._dbRowToJson(rows[0]) : null;
+        }
+
+        const data = await this._readMailboxesLegacy();
+        return data.find(m => m.email === email && m.is_active !== false) || null;
     }
 
     /**
      * 添加单个邮箱
      */
     async addMailbox(mailboxData) {
+        const { email, password, client_id, refresh_token } = mailboxData;
+        const source = mailboxData.source || 'manual';
+
+        // 验证必填字段
+        if (!email || !password || !client_id || !refresh_token) {
+            throw new Error('缺少必要的邮箱配置信息');
+        }
+
+        // 验证邮箱格式
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            throw new Error('邮箱格式无效');
+        }
+
+        // 验证字段长度
+        if (email.length > 255) throw new Error('邮箱地址过长（最大 255 字符）');
+        if (password.length > 1024) throw new Error('密码过长（最大 1024 字符）');
+        if (client_id.length > 255) throw new Error('客户端 ID 过长（最大 255 字符）');
+        if (refresh_token.length > 2048) throw new Error('刷新令牌过长（最大 2048 字符）');
+
+        if (this.storageMode === 'postgres') {
+            const db = getDb();
+
+            // 检查是否已存在
+            const existing = await db.select().from(mailboxes).where(eq(mailboxes.email, email));
+
+            if (existing.length > 0) {
+                const row = existing[0];
+                if (row.isActive) {
+                    throw new Error('邮箱已存在');
+                }
+                // 重新激活已删除的邮箱
+                const [updated] = await db.update(mailboxes)
+                    .set({
+                        password,
+                        clientId: client_id,
+                        refreshToken: refresh_token,
+                        isActive: true,
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(mailboxes.id, row.id))
+                    .returning();
+                return this._dbRowToJson(updated);
+            }
+
+            // 创建新邮箱
+            const [inserted] = await db.insert(mailboxes)
+                .values({
+                    email,
+                    password,
+                    clientId: client_id,
+                    refreshToken: refresh_token,
+                    isActive: true,
+                    source,
+                })
+                .returning();
+            return this._dbRowToJson(inserted);
+        }
+
+        // 旧存储模式
         return this._acquireWriteLock(async () => {
-            const { email, password, client_id, refresh_token } = mailboxData;
-            const source = mailboxData.source || 'manual';
-
-            // 验证必填字段
-            if (!email || !password || !client_id || !refresh_token) {
-                throw new Error('缺少必要的邮箱配置信息');
-            }
-
-            // 验证邮箱格式
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                throw new Error('邮箱格式无效');
-            }
-
-            // 验证字段长度
-            if (email.length > 255) {
-                throw new Error('邮箱地址过长（最大 255 字符）');
-            }
-            if (password.length > 1024) {
-                throw new Error('密码过长（最大 1024 字符）');
-            }
-            if (client_id.length > 255) {
-                throw new Error('客户端 ID 过长（最大 255 字符）');
-            }
-            if (refresh_token.length > 2048) {
-                throw new Error('刷新令牌过长（最大 2048 字符）');
-            }
-
-            const mailboxes = await this.readMailboxes();
-            const existing = mailboxes.find(m => m.email === email);
+            const allMailboxes = await this._readMailboxesLegacy();
+            const existing = allMailboxes.find(m => m.email === email);
 
             if (existing && existing.is_active !== false) {
                 throw new Error('邮箱已存在');
@@ -186,7 +311,6 @@ class MailboxService {
             let mailbox;
 
             if (existing && existing.is_active === false) {
-                // 重新激活已存在但被删除的邮箱
                 existing.password = password;
                 existing.client_id = client_id;
                 existing.refresh_token = refresh_token;
@@ -195,7 +319,6 @@ class MailboxService {
                 existing.source = existing.source || source;
                 mailbox = existing;
             } else {
-                // 创建新邮箱
                 mailbox = {
                     id: uuidv4(),
                     email,
@@ -207,10 +330,10 @@ class MailboxService {
                     created_at: now,
                     updated_at: now,
                 };
-                mailboxes.push(mailbox);
+                allMailboxes.push(mailbox);
             }
 
-            await this.writeMailboxes(mailboxes);
+            await this._writeMailboxesLegacy(allMailboxes);
             return mailbox;
         });
     }
@@ -219,21 +342,71 @@ class MailboxService {
      * 批量添加邮箱
      */
     async addMailboxesBatch(mailboxesData) {
-        return this._acquireWriteLock(async () => {
-            if (!Array.isArray(mailboxesData) || mailboxesData.length === 0) {
-                throw new Error('邮箱数据格式错误');
-            }
+        if (!Array.isArray(mailboxesData) || mailboxesData.length === 0) {
+            throw new Error('邮箱数据格式错误');
+        }
 
-            // 验证每个邮箱的数据完整性
-            for (const mailbox of mailboxesData) {
-                if (!mailbox.email || !mailbox.password || !mailbox.client_id || !mailbox.refresh_token) {
-                    throw new Error('邮箱配置信息不完整');
+        // 验证每个邮箱的数据完整性
+        for (const mailbox of mailboxesData) {
+            if (!mailbox.email || !mailbox.password || !mailbox.client_id || !mailbox.refresh_token) {
+                throw new Error('邮箱配置信息不完整');
+            }
+        }
+
+        if (this.storageMode === 'postgres') {
+            const db = getDb();
+            const added = [];
+            const reactivated = [];
+            const skipped = [];
+
+            for (const data of mailboxesData) {
+                const source = data.source || 'manual';
+                const existing = await db.select().from(mailboxes).where(eq(mailboxes.email, data.email));
+
+                if (existing.length === 0) {
+                    // 新邮箱
+                    const [inserted] = await db.insert(mailboxes)
+                        .values({
+                            email: data.email,
+                            password: data.password,
+                            clientId: data.client_id,
+                            refreshToken: data.refresh_token,
+                            isActive: true,
+                            source,
+                        })
+                        .returning();
+                    added.push(this._dbRowToJson(inserted));
+                } else if (!existing[0].isActive) {
+                    // 重新激活
+                    const [updated] = await db.update(mailboxes)
+                        .set({
+                            password: data.password,
+                            clientId: data.client_id,
+                            refreshToken: data.refresh_token,
+                            isActive: true,
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(mailboxes.id, existing[0].id))
+                        .returning();
+                    reactivated.push(this._dbRowToJson(updated));
+                } else {
+                    skipped.push(data.email);
                 }
             }
 
-            const existingMailboxes = await this.readMailboxes();
-            const now = new Date().toISOString();
+            return {
+                data: [...added, ...reactivated],
+                added: added.length,
+                reactivated: reactivated.length,
+                skipped: skipped.length,
+                skippedEmails: skipped,
+            };
+        }
 
+        // 旧存储模式
+        return this._acquireWriteLock(async () => {
+            const existingMailboxes = await this._readMailboxesLegacy();
+            const now = new Date().toISOString();
             const emailMap = new Map(existingMailboxes.map(m => [m.email, m]));
 
             const added = [];
@@ -245,7 +418,6 @@ class MailboxService {
                 const source = mailboxData.source || 'manual';
 
                 if (!current) {
-                    // 新邮箱
                     const newMailbox = {
                         id: uuidv4(),
                         email: mailboxData.email,
@@ -261,7 +433,6 @@ class MailboxService {
                     emailMap.set(newMailbox.email, newMailbox);
                     added.push(newMailbox);
                 } else if (current.is_active === false) {
-                    // 重新激活
                     current.password = mailboxData.password;
                     current.client_id = mailboxData.client_id;
                     current.refresh_token = mailboxData.refresh_token;
@@ -270,12 +441,11 @@ class MailboxService {
                     current.source = current.source || source;
                     reactivated.push(current);
                 } else {
-                    // 跳过已存在的
                     skipped.push(mailboxData.email);
                 }
             }
 
-            await this.writeMailboxes(existingMailboxes);
+            await this._writeMailboxesLegacy(existingMailboxes);
 
             return {
                 data: [...added, ...reactivated],
@@ -291,29 +461,49 @@ class MailboxService {
      * 更新邮箱
      */
     async updateMailbox(id, updateData) {
-        return this._acquireWriteLock(async () => {
-            const { email, password, client_id, refresh_token } = updateData;
+        const { email, password, client_id, refresh_token } = updateData;
 
-            const data = {};
-            if (email) data.email = email;
-            if (password) data.password = password;
-            if (client_id) data.client_id = client_id;
-            if (refresh_token) data.refresh_token = refresh_token;
+        const data = {};
+        if (email) data.email = email;
+        if (password) data.password = password;
+        if (client_id) data.clientId = client_id;
+        if (refresh_token) data.refreshToken = refresh_token;
 
-            if (Object.keys(data).length === 0) {
-                throw new Error('没有提供要更新的数据');
+        if (Object.keys(data).length === 0) {
+            throw new Error('没有提供要更新的数据');
+        }
+
+        if (this.storageMode === 'postgres') {
+            const db = getDb();
+            data.updatedAt = new Date();
+
+            const [updated] = await db.update(mailboxes)
+                .set(data)
+                .where(eq(mailboxes.id, id))
+                .returning();
+
+            if (!updated) {
+                throw new Error('邮箱不存在');
             }
+            return this._dbRowToJson(updated);
+        }
 
-            const mailboxes = await this.readMailboxes();
-            const mailbox = mailboxes.find(m => m.id === id);
+        // 旧存储模式
+        return this._acquireWriteLock(async () => {
+            const allMailboxes = await this._readMailboxesLegacy();
+            const mailbox = allMailboxes.find(m => m.id === id);
 
             if (!mailbox) {
                 throw new Error('邮箱不存在');
             }
 
+            // 转换字段名
+            if (data.clientId) { data.client_id = data.clientId; delete data.clientId; }
+            if (data.refreshToken) { data.refresh_token = data.refreshToken; delete data.refreshToken; }
+
             Object.assign(mailbox, data, { updated_at: new Date().toISOString() });
 
-            await this.writeMailboxes(mailboxes);
+            await this._writeMailboxesLegacy(allMailboxes);
             return mailbox;
         });
     }
@@ -322,9 +512,23 @@ class MailboxService {
      * 删除邮箱（软删除）
      */
     async deleteMailbox(id) {
+        if (this.storageMode === 'postgres') {
+            const db = getDb();
+            const [updated] = await db.update(mailboxes)
+                .set({ isActive: false, updatedAt: new Date() })
+                .where(eq(mailboxes.id, id))
+                .returning();
+
+            if (!updated) {
+                throw new Error('邮箱不存在');
+            }
+            return { message: '邮箱删除成功' };
+        }
+
+        // 旧存储模式
         return this._acquireWriteLock(async () => {
-            const mailboxes = await this.readMailboxes();
-            const mailbox = mailboxes.find(m => m.id === id);
+            const allMailboxes = await this._readMailboxesLegacy();
+            const mailbox = allMailboxes.find(m => m.id === id);
 
             if (!mailbox) {
                 throw new Error('邮箱不存在');
@@ -333,7 +537,7 @@ class MailboxService {
             mailbox.is_active = false;
             mailbox.updated_at = new Date().toISOString();
 
-            await this.writeMailboxes(mailboxes);
+            await this._writeMailboxesLegacy(allMailboxes);
             return { message: '邮箱删除成功' };
         });
     }
@@ -346,14 +550,29 @@ class MailboxService {
             throw new Error('缺少要删除的邮箱ID列表');
         }
 
-        return this._acquireWriteLock(async () => {
-            const mailboxes = await this.readMailboxes();
+        if (this.storageMode === 'postgres') {
+            const db = getDb();
             let deleted = 0;
 
+            for (const id of ids) {
+                const result = await db.update(mailboxes)
+                    .set({ isActive: false, updatedAt: new Date() })
+                    .where(and(eq(mailboxes.id, id), eq(mailboxes.isActive, true)))
+                    .returning();
+                if (result.length > 0) deleted++;
+            }
+
+            return { message: '批量删除完成', deleted, total: ids.length };
+        }
+
+        // 旧存储模式
+        return this._acquireWriteLock(async () => {
+            const allMailboxes = await this._readMailboxesLegacy();
+            let deleted = 0;
             const now = new Date().toISOString();
 
             for (const id of ids) {
-                const mailbox = mailboxes.find(m => m.id === id);
+                const mailbox = allMailboxes.find(m => m.id === id);
                 if (mailbox && mailbox.is_active !== false) {
                     mailbox.is_active = false;
                     mailbox.updated_at = now;
@@ -361,13 +580,8 @@ class MailboxService {
                 }
             }
 
-            await this.writeMailboxes(mailboxes);
-
-            return {
-                message: '批量删除完成',
-                deleted,
-                total: ids.length
-            };
+            await this._writeMailboxesLegacy(allMailboxes);
+            return { message: '批量删除完成', deleted, total: ids.length };
         });
     }
 
@@ -375,16 +589,26 @@ class MailboxService {
      * 永久删除邮箱（物理删除）
      */
     async permanentlyDeleteMailbox(id) {
-        const mailboxes = await this.readMailboxes();
-        const index = mailboxes.findIndex(m => m.id === id);
+        if (this.storageMode === 'postgres') {
+            const db = getDb();
+            const result = await db.delete(mailboxes).where(eq(mailboxes.id, id)).returning();
+
+            if (result.length === 0) {
+                throw new Error('邮箱不存在');
+            }
+            return { message: '邮箱永久删除成功' };
+        }
+
+        // 旧存储模式
+        const allMailboxes = await this._readMailboxesLegacy();
+        const index = allMailboxes.findIndex(m => m.id === id);
 
         if (index === -1) {
             throw new Error('邮箱不存在');
         }
 
-        mailboxes.splice(index, 1);
-        await this.writeMailboxes(mailboxes);
-
+        allMailboxes.splice(index, 1);
+        await this._writeMailboxesLegacy(allMailboxes);
         return { message: '邮箱永久删除成功' };
     }
 
@@ -392,12 +616,22 @@ class MailboxService {
      * 获取邮箱统计信息
      */
     async getStatistics() {
-        const mailboxes = await this.readMailboxes();
+        if (this.storageMode === 'postgres') {
+            const db = getDb();
+            const all = await db.select().from(mailboxes);
+            const active = all.filter(m => m.isActive);
+            return {
+                total: all.length,
+                active: active.length,
+                inactive: all.length - active.length,
+            };
+        }
 
+        const allMailboxes = await this._readMailboxesLegacy();
         return {
-            total: mailboxes.length,
-            active: mailboxes.filter(m => m.is_active !== false).length,
-            inactive: mailboxes.filter(m => m.is_active === false).length,
+            total: allMailboxes.length,
+            active: allMailboxes.filter(m => m.is_active !== false).length,
+            inactive: allMailboxes.filter(m => m.is_active === false).length,
         };
     }
 
@@ -408,79 +642,97 @@ class MailboxService {
      * @param {number} concurrency 并发数，默认 10
      */
     async validateMailboxesBySource(ids = [], source = 'purchase', concurrency = 10) {
-        return this._acquireWriteLock(async () => {
-            const mailboxes = await this.readMailboxes();
-            const activeMailboxes = mailboxes.filter(m => m.is_active !== false);
-
-            const target = activeMailboxes.filter(m => {
-                if (source && m.source !== source) return false;
-                if (ids.length > 0 && !ids.includes(m.id)) return false;
-                return true;
-            });
-
-            let checked = 0;
-            let removed = 0;
-            const removedEmails = [];
-            const removedIds = [];
-            const errors = [];
-
-            // 并发检测函数
-            const checkMailbox = async (mailbox) => {
-                try {
-                    await require('./proxy.service').getMailboxEmails(mailbox, 'inbox');
-                    return { status: 'valid', mailbox };
-                } catch (err) {
-                    const status = err.status || (err.message && err.message.includes('HTTP 500') ? 500 : null);
-                    if (status === 500) {
-                        return { status: 'invalid', mailbox };
-                    } else {
-                        return { status: 'error', mailbox, error: err.message };
-                    }
-                }
-            };
-
-            // 分批并发处理
-            for (let i = 0; i < target.length; i += concurrency) {
-                const batch = target.slice(i, i + concurrency);
-                const results = await Promise.all(batch.map(checkMailbox));
-
-                for (const result of results) {
-                    if (result.status === 'valid') {
-                        checked++;
-                    } else if (result.status === 'invalid') {
-                        removedIds.push(result.mailbox.id);
-                        removedEmails.push(result.mailbox.email);
-                        removed++;
-                    } else if (result.status === 'error') {
-                        errors.push({ email: result.mailbox.email, error: result.error });
-                    }
-                }
-            }
-
-            // 批量软删除所有失效的邮箱
-            if (removedIds.length > 0) {
-                const now = new Date().toISOString();
-                for (const id of removedIds) {
-                    const mailbox = mailboxes.find(m => m.id === id);
-                    if (mailbox) {
-                        mailbox.is_active = false;
-                        mailbox.updated_at = now;
-                    }
-                }
-                await this.writeMailboxes(mailboxes);
-            }
-
-            // 返回剩余的活跃邮箱
-            const remaining = mailboxes.filter(m => m.is_active !== false);
-
-            return {
-                checked,
-                removed,
-                removedEmails,
-                errors,
-                data: remaining,
-            };
+        // 获取目标邮箱
+        const allMailboxes = await this.getAllMailboxes();
+        const target = allMailboxes.filter(m => {
+            if (source && m.source !== source) return false;
+            if (ids.length > 0 && !ids.includes(m.id)) return false;
+            return true;
         });
+
+        let checked = 0;
+        let removed = 0;
+        const removedEmails = [];
+        const removedIds = [];
+        const errors = [];
+
+        // 并发检测函数
+        const checkMailbox = async (mailbox) => {
+            try {
+                await require('./proxy.service').getMailboxEmails(mailbox, 'inbox');
+                return { status: 'valid', mailbox };
+            } catch (err) {
+                const status = err.status || (err.message && err.message.includes('HTTP 500') ? 500 : null);
+                if (status === 500) {
+                    return { status: 'invalid', mailbox };
+                } else {
+                    return { status: 'error', mailbox, error: err.message };
+                }
+            }
+        };
+
+        // 分批并发处理
+        for (let i = 0; i < target.length; i += concurrency) {
+            const batch = target.slice(i, i + concurrency);
+            const results = await Promise.all(batch.map(checkMailbox));
+
+            for (const result of results) {
+                if (result.status === 'valid') {
+                    checked++;
+                } else if (result.status === 'invalid') {
+                    removedIds.push(result.mailbox.id);
+                    removedEmails.push(result.mailbox.email);
+                    removed++;
+                } else if (result.status === 'error') {
+                    errors.push({ email: result.mailbox.email, error: result.error });
+                }
+            }
+        }
+
+        // 批量软删除所有失效的邮箱
+        if (removedIds.length > 0) {
+            await this.deleteMailboxesBatch(removedIds);
+        }
+
+        // 返回剩余的活跃邮箱
+        const remaining = await this.getAllMailboxes();
+
+        return {
+            checked,
+            removed,
+            removedEmails,
+            errors,
+            data: remaining,
+        };
+    }
+
+    // ============================================================
+    // 兼容旧 API（用于测试和迁移）
+    // ============================================================
+
+    /**
+     * 读取邮箱列表（兼容旧 API）
+     * @deprecated 使用 getAllMailboxes() 替代
+     */
+    async readMailboxes() {
+        if (this.storageMode === 'postgres') {
+            const db = getDb();
+            const rows = await db.select().from(mailboxes);
+            return rows.map(row => this._dbRowToJson(row));
+        }
+        return this._readMailboxesLegacy();
+    }
+
+    /**
+     * 写入邮箱列表（兼容旧 API，仅用于测试）
+     * @deprecated 使用具体的 CRUD 方法替代
+     */
+    async writeMailboxes(data) {
+        if (this.storageMode === 'postgres') {
+            console.warn('[MailboxService] writeMailboxes() not supported in postgres mode');
+            return;
+        }
+        return this._writeMailboxesLegacy(data);
     }
 }
 
@@ -488,6 +740,3 @@ class MailboxService {
 const mailboxService = new MailboxService();
 
 module.exports = mailboxService;
-
-
-
