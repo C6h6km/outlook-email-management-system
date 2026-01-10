@@ -18,7 +18,7 @@ class AppError extends Error {
         this.code = code;
         this.isOperational = isOperational;
         this.timestamp = new Date().toISOString();
-        
+
         Error.captureStackTrace(this, this.constructor);
     }
 
@@ -113,6 +113,39 @@ class ServiceUnavailableError extends AppError {
     }
 }
 
+// ==================== 敏感字段脱敏 ====================
+
+/**
+ * 敏感字段列表（小写比较）
+ */
+const SENSITIVE_FIELDS = [
+    'password', 'refresh_token', 'refreshtoken', 'client_id', 'clientid',
+    'app_key', 'appkey', 'token', 'secret', 'authorization', 'cookie'
+];
+
+/**
+ * 脱敏对象中的敏感字段
+ * @param {Object} obj - 要脱敏的对象
+ * @returns {Object} 脱敏后的对象
+ */
+function sanitizeObject(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(sanitizeObject);
+
+    const sanitized = {};
+    for (const [key, value] of Object.entries(obj)) {
+        const lowerKey = key.toLowerCase();
+        if (SENSITIVE_FIELDS.some(f => lowerKey.includes(f))) {
+            sanitized[key] = '[REDACTED]';
+        } else if (typeof value === 'object' && value !== null) {
+            sanitized[key] = sanitizeObject(value);
+        } else {
+            sanitized[key] = value;
+        }
+    }
+    return sanitized;
+}
+
 // ==================== 错误处理中间件 ====================
 
 /**
@@ -132,16 +165,16 @@ function errorHandler(err, req, res, next) {
     // 确保错误有状态码
     err.statusCode = err.statusCode || 500;
     err.code = err.code || 'INTERNAL_ERROR';
-    
+
     // 记录错误
     logError(err, req);
-    
+
     // 发送错误响应
     sendErrorResponse(err, req, res);
 }
 
 /**
- * 记录错误
+ * 记录错误（敏感信息已脱敏）
  */
 function logError(err, req) {
     const errorLog = {
@@ -151,8 +184,8 @@ function logError(err, req) {
         statusCode: err.statusCode,
         path: req.path,
         method: req.method,
-        query: req.query,
-        body: req.body,
+        query: sanitizeObject(req.query),
+        body: sanitizeObject(req.body),
         ip: req.ip || req.connection.remoteAddress,
         userAgent: req.get('user-agent'),
     };
@@ -228,7 +261,7 @@ function validate(schema) {
                 field: detail.path.join('.'),
                 message: detail.message,
             }));
-            
+
             return next(new ValidationError('请求参数验证失败', fields));
         }
 
@@ -256,11 +289,11 @@ async function withFallback(operation, fallback, errorMessage = '操作失败') 
  * 带重试的操作
  */
 async function withRetry(operation, options = {}) {
-    const { 
-        maxRetries = 3, 
-        delay = 1000, 
+    const {
+        maxRetries = 3,
+        delay = 1000,
         backoff = 2,
-        onRetry = null 
+        onRetry = null
     } = options;
 
     let lastError;
@@ -308,13 +341,13 @@ module.exports = {
     BusinessError,
     RateLimitError,
     ServiceUnavailableError,
-    
+
     // 中间件
     notFoundHandler,
     errorHandler,
     asyncHandler,
     validate,
-    
+
     // 工具函数
     withFallback,
     withRetry,

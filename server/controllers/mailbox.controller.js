@@ -12,7 +12,7 @@ class MailboxController {
     async getAll(req, res) {
         try {
             const mailboxes = await mailboxService.getAllMailboxes();
-            
+
             res.json({
                 success: true,
                 data: mailboxes,
@@ -26,7 +26,7 @@ class MailboxController {
             });
         }
     }
-    
+
     /**
      * 根据ID获取邮箱
      */
@@ -34,14 +34,14 @@ class MailboxController {
         try {
             const { id } = req.params;
             const mailbox = await mailboxService.getMailboxById(id);
-            
+
             if (!mailbox) {
                 return res.status(404).json({
                     success: false,
                     error: '邮箱不存在',
                 });
             }
-            
+
             res.json({
                 success: true,
                 data: mailbox,
@@ -55,25 +55,25 @@ class MailboxController {
             });
         }
     }
-    
+
     /**
      * 添加单个邮箱
      */
     async create(req, res) {
         try {
             const mailbox = await mailboxService.addMailbox(req.body);
-            
+
             res.status(201).json({
                 success: true,
                 data: mailbox,
             });
         } catch (error) {
-            logger.error('添加邮箱失败', { error: error.message, body: req.body });
+            logger.error('添加邮箱失败', { error: error.message, email: req.body?.email || 'unknown' });
 
             const status = error.message === '邮箱已存在' ? 409 :
-                          error.message.includes('缺少') ? 400 :
-                          error.message.includes('格式无效') ? 400 :
-                          error.message.includes('过长') ? 400 : 500;
+                error.message.includes('缺少') ? 400 :
+                    error.message.includes('格式无效') ? 400 :
+                        error.message.includes('过长') ? 400 : 500;
 
             res.status(status).json({
                 success: false,
@@ -81,7 +81,7 @@ class MailboxController {
             });
         }
     }
-    
+
     /**
      * 批量添加邮箱
      */
@@ -89,17 +89,17 @@ class MailboxController {
         try {
             const { mailboxes } = req.body;
             const result = await mailboxService.addMailboxesBatch(mailboxes);
-            
+
             res.status(201).json({
                 success: true,
                 ...result,
             });
         } catch (error) {
             console.error('批量添加邮箱失败:', error);
-            
-            const status = error.message.includes('格式错误') || 
-                          error.message.includes('不完整') ? 400 : 500;
-            
+
+            const status = error.message.includes('格式错误') ||
+                error.message.includes('不完整') ? 400 : 500;
+
             res.status(status).json({
                 success: false,
                 error: '批量添加邮箱失败',
@@ -107,7 +107,7 @@ class MailboxController {
             });
         }
     }
-    
+
     /**
      * 更新邮箱
      */
@@ -115,17 +115,17 @@ class MailboxController {
         try {
             const { id } = req.params;
             const mailbox = await mailboxService.updateMailbox(id, req.body);
-            
+
             res.json({
                 success: true,
                 data: mailbox,
             });
         } catch (error) {
             console.error('更新邮箱失败:', error);
-            
-            const status = error.message === '邮箱不存在' ? 404 : 
-                          error.message.includes('没有提供') ? 400 : 500;
-            
+
+            const status = error.message === '邮箱不存在' ? 404 :
+                error.message.includes('没有提供') ? 400 : 500;
+
             res.status(status).json({
                 success: false,
                 error: '更新邮箱失败',
@@ -133,7 +133,7 @@ class MailboxController {
             });
         }
     }
-    
+
     /**
      * 删除邮箱（软删除）
      */
@@ -141,16 +141,16 @@ class MailboxController {
         try {
             const { id } = req.params;
             await mailboxService.deleteMailbox(id);
-            
+
             res.json({
                 success: true,
                 message: '邮箱删除成功',
             });
         } catch (error) {
             console.error('删除邮箱失败:', error);
-            
+
             const status = error.message === '邮箱不存在' ? 404 : 500;
-            
+
             res.status(status).json({
                 success: false,
                 error: '删除邮箱失败',
@@ -183,14 +183,14 @@ class MailboxController {
             });
         }
     }
-    
+
     /**
      * 获取统计信息
      */
     async getStatistics(req, res) {
         try {
             const stats = await mailboxService.getStatistics();
-            
+
             res.json({
                 success: true,
                 data: stats,

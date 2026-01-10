@@ -13,26 +13,32 @@ class ProxyService {
         this.mailApiBaseUrl = config.externalMailApi.baseUrl;
         this.mailApiPassword = config.externalMailApi.password;
     }
-    
+
     /**
      * 获取仓库URL
      */
     getLibraryUrl(library = '1') {
         const baseUrl = this.libraries[library];
-        
+
         if (!baseUrl) {
             throw new Error('无效的库选择');
         }
-        
+
         return baseUrl;
     }
-    
+
     /**
-     * 发送请求到外部API
+     * 发送请求到外部API（带超时）
      */
     async request(url, options = {}) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+
         try {
-            const response = await fetch(url, options);
+            const response = await fetch(url, {
+                ...options,
+                signal: controller.signal,
+            });
 
             // 检查 HTTP 状态码
             if (!response.ok) {
@@ -60,12 +66,17 @@ class ProxyService {
             const data = await response.json();
             return data;
         } catch (error) {
+            if (error.name === 'AbortError') {
+                throw new Error('请求超时（30秒）');
+            }
             const err = new Error(`请求失败: ${error.message}`);
             if (error.status) err.status = error.status;
             throw err;
+        } finally {
+            clearTimeout(timeoutId);
         }
     }
-    
+
     /**
      * 查询账户余额
      */
@@ -73,13 +84,13 @@ class ProxyService {
         if (!appId || !appKey) {
             throw new Error('缺少必要参数');
         }
-        
+
         const baseUrl = this.getLibraryUrl(library);
         const params = new URLSearchParams({
             app_id: appId,
             app_key: appKey,
         });
-        
+
         const url = `${baseUrl}/login.php`;
         const data = await this.request(url, {
             method: 'POST',
@@ -88,10 +99,10 @@ class ProxyService {
             },
             body: params.toString(),
         });
-        
+
         return data;
     }
-    
+
     /**
      * 查询商品库存
      */
@@ -99,20 +110,20 @@ class ProxyService {
         if (!commodityId) {
             throw new Error('缺少商品ID');
         }
-        
+
         const baseUrl = this.getLibraryUrl(library);
         const url = `${baseUrl}/getStock.php?commodity_id=${commodityId}`;
-        
+
         const data = await this.request(url, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json',
             },
         });
-        
+
         return data;
     }
-    
+
     /**
      * 购买邮箱
      */
@@ -120,7 +131,7 @@ class ProxyService {
         if (!appId || !appKey || !commodityId || !num) {
             throw new Error('缺少必要参数');
         }
-        
+
         const baseUrl = this.getLibraryUrl(library);
         const params = new URLSearchParams({
             app_id: appId,
@@ -128,7 +139,7 @@ class ProxyService {
             commodity_id: commodityId,
             num: num.toString(),
         });
-        
+
         const url = `${baseUrl}/getEmail.php`;
         const data = await this.request(url, {
             method: 'POST',

@@ -29,12 +29,12 @@ function getEncryptionKey() {
     try {
         const buf = Buffer.from(secret, 'base64');
         if (buf.length === 32) return buf;
-    } catch {}
+    } catch { }
     // 尝试 hex
     try {
         const buf = Buffer.from(secret, 'hex');
         if (buf.length === 32) return buf;
-    } catch {}
+    } catch { }
     // 兜底：对任意字符串做 SHA-256 得到 32 字节密钥
     return crypto.createHash('sha256').update(secret, 'utf8').digest();
 }
@@ -169,8 +169,13 @@ async function writeJSONBlob(key, data) {
 
     // 创建新的 blob
     try {
+        // 安全检查：生产环境下无加密时发出警告
+        if (!encryptionKey && process.env.NODE_ENV === 'production') {
+            logger.warn('[Blob] ⚠️ 生产环境未配置 BLOB_ENCRYPTION_KEY，敏感数据可能暴露');
+        }
+
         const result = await put(key, payload, {
-            access: 'public',
+            access: encryptionKey ? 'public' : 'private', // 无加密时使用 private
             contentType: 'application/json; charset=utf-8',
             token: BLOB_TOKEN, // 显式传入 token
             addRandomSuffix: false, // 不添加随机后缀

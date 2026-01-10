@@ -34,10 +34,10 @@ const config = {
         '2': 'https://outlook007.cc/api1',
     },
 
-    // 采购API凭证（从环境变量读取，避免前端暴露）
+    // 采购API凭证（从环境变量读取，必须配置）
     purchaseCredentials: {
-        appId: process.env.PURCHASE_APP_ID || '1097',
-        appKey: process.env.PURCHASE_APP_KEY || 'A2380737CA36CC61',
+        appId: process.env.PURCHASE_APP_ID || null,
+        appKey: process.env.PURCHASE_APP_KEY || null,
     },
 
     // 外部邮件 API 配置（从环境变量读取，避免前端暴露）

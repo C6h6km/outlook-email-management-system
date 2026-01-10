@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git rm:*)",
+      "Bash(npm install:*)",
+      "Bash(npm test:*)",
+      "Bash(test:*)",
+      "Bash(npm run dev:*)",
+      "Bash(ls -la \"D:\\\\Crawler project\\\\outlook邮件管理系统\\\\public\\\\icons\"\" 2>/dev/null || echo \"icons 目录不存在 \")",
+      "Bash(ls:*)"
+    ]
+  }
+}

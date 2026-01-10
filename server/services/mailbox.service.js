@@ -346,10 +346,28 @@ class MailboxService {
             throw new Error('邮箱数据格式错误');
         }
 
-        // 验证每个邮箱的数据完整性
+        // 验证每个邮箱的数据完整性和字段长度
         for (const mailbox of mailboxesData) {
             if (!mailbox.email || !mailbox.password || !mailbox.client_id || !mailbox.refresh_token) {
                 throw new Error('邮箱配置信息不完整');
+            }
+            // 字段长度校验
+            if (mailbox.email.length > 255) {
+                throw new Error(`邮箱地址过长: ${mailbox.email.substring(0, 50)}...`);
+            }
+            if (mailbox.password.length > 1024) {
+                throw new Error('密码过长（超过1024字符）');
+            }
+            if (mailbox.client_id.length > 255) {
+                throw new Error('client_id 过长');
+            }
+            if (mailbox.refresh_token.length > 2048) {
+                throw new Error('refresh_token 过长');
+            }
+            // 邮箱格式校验
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(mailbox.email)) {
+                throw new Error(`邮箱格式无效: ${mailbox.email}`);
             }
         }
 
